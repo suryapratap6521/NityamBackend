@@ -1,0 +1,831 @@
+const bcrypt = require("bcrypt");
+const User = require("../models/User");
+const Community=require('../models/Community');
+const OTP = require("../models/OTP");
+const jwt = require("jsonwebtoken");
+const otpGenerator = require("otp-generator");
+const mailSender = require("../utils/mailSender");
+const { passwordUpdated } = require("../mail/templates/passwordUpdate");
+const Profile = require("../models/Profile");
+const passport=require("passport");
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const twilio = require('twilio');
+
+
+require("dotenv").config();
+// Twilio configuration
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const client = twilio(accountSid, authToken);
+
+
+const mongoose = require('mongoose');
+
+//signup controller for registering the Users
+// exports.signup = async (req, res) => {
+//     console.log(req.body);
+//     try {
+//         // Destructure fields from the request body
+//         const {
+//             firstName,
+//             lastName,
+//             email,
+//             password,
+//             city,
+//             state,
+//             community,
+//             phoneNumber,
+//             postalCost,
+//             confirmPassword,
+// 			profession,
+// 			hourlyCharge,
+//             otp,
+//         } = req.body;
+// 		console.log(firstName,
+//             lastName,
+//             email,
+//             password,
+//             city,
+//             state,
+//             community,
+//             phoneNumber,
+//             postalCost,
+//             confirmPassword,
+// 			profession,
+// 			hourlyCharge,
+//             otp);
+//         // Check if All Details are there or not
+//         if (
+//             !firstName ||
+//             !lastName ||
+//             !email ||
+//             !password ||
+//             !confirmPassword ||
+//             !otp ||
+//             !phoneNumber ||
+//             !state ||
+//             !city ||
+//             !community ||
+//             !postalCost
+//         ) {
+//             return res.status(403).send({
+//                 success: false,
+//                 message: "All Fields are required",
+//             });
+//         }
+//         // Check if password and confirm password match
+//         if (password !== confirmPassword) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message:
+//                     "Password and Confirm Password do not match. Please try again.",
+//             });
+//         }
+
+//         // Check if user already exists
+//         const existingUser = await User.findOne({ email });
+//         if (existingUser) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "User already exists. Please sign in to continue.",
+//             });
+//         }
+// 		const existingUserWithNumber=await User.findOne({phoneNumber})
+// 		if(existingUserWithNumber){
+// 			return res.status(400).json({
+// 				success:false,
+// 				message:"User already exists with this Phone number",
+// 			})
+// 		}
+		
+
+//         // Find the most recent OTP for the email
+//         const response = await OTP.find({ phoneNumber }).sort({ createdAt: -1 }).limit(1);
+//         console.log(response,"--------->response of otp");
+//         if (response.length === 0 || otp !== response[0].otp) {
+//             // OTP not found for the email or invalid OTP
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "The OTP is not valid",
+//             });
+//         }
+
+//         // Hash the password
+//         const hashedPassword = await bcrypt.hash(password, 10);
+
+//         // Check if the community already exists
+//         let communityDetails = await Community.findOne({ communityName: community });
+
+//         if (!communityDetails) {
+//             // Create the community if it doesn't exist
+//             communityDetails = await Community.create({ communityName: community });
+//         }
+
+//         // Create the Additional Profile For User
+//         const profileDetails = await Profile.create({
+//             gender: null,
+//             dateOfBirth: null,
+//             about: null,
+//             phoneNumber: null,
+//         });
+
+//         // Create the user
+//         const user = await User.create({
+//             firstName,
+//             lastName,
+//             email,
+//             phoneNumber,
+//             password: hashedPassword,
+//             accountType: "People",
+//             additionalDetails: profileDetails._id,
+//             image: `https://api.dicebear.com/5.x/initials/svg?seed=${firstName} ${lastName}`,
+//             city,
+//             state,
+//             postalCost,
+//             communityDetails: communityDetails._id,
+// 			profession,
+// 			hourlyCharge, // Assign the community details to the user
+//         });
+// 		console.log(user);
+
+//         // Add user ObjectId to the community's userInCommunity array
+//         await Community.findByIdAndUpdate(
+//             communityDetails._id,
+//             { $addToSet: { userInCommunity: user._id } },
+//             { new: true }
+//         );
+
+//         return res.status(200).json({
+//             success: true,
+//             user,
+//             message: "User registered successfully",
+//         });
+//     } catch (error) {
+//         console.error(error);
+//         return res.status(500).json({
+//             success: false,
+//             message: "User cannot be registered. Please try again.",
+//         });
+//     }
+// };
+
+
+
+// Signup controller for registering new users
+exports.signup = async (req, res) => {
+	try {
+		const { username, email, phoneNumber, password, confirmPassword, otp } = req.body;
+		console.log(req.body)
+		// Basic validation
+		if (!username || !email || !phoneNumber || !password || !confirmPassword) {
+			return res.status(400).json({
+				success: false,
+				message: "All fields are required.",
+			});
+		}
+
+		// Password and Confirm Password match validation
+		if (password !== confirmPassword) {
+			return res.status(400).json({
+				success: false,
+				message: "Passwords do not match.",
+			});
+		}
+
+		// Check if user already exists with the email
+		const existingUserByEmail = await User.findOne({ email });
+		if (existingUserByEmail) {
+			return res.status(400).json({
+				success: false,
+				message: "User already exists with this email. Please login.",
+			});
+		}
+
+		// Check if user already exists with the phone number
+		const existingUserByPhone = await User.findOne({ phoneNumber });
+		if (existingUserByPhone) {
+			return res.status(400).json({
+				success: false,
+				message: "User already exists with this phone number.",
+			});
+		}
+
+		// Validate OTP for the phone number
+		const latestOTP = await OTP.findOne({ }).sort({ createdAt: -1 });
+		console.log(otp,"---------otp");
+		console.log(latestOTP,"------>latest");
+		if (!latestOTP || otp !== latestOTP.otp) {
+			return res.status(400).json({
+				success: false,
+				message: "Invalid or expired OTP.",
+			});
+		}
+
+		// Hash the password before saving it
+		const hashedPassword = await bcrypt.hash(password, 10);
+
+		// Create user profile
+		const profile = await Profile.create({
+			gender: null,
+			dateOfBirth: null,
+			about: null,
+			phoneNumber: null,
+		});
+
+		// Create new user
+		const user = await User.create({
+			username,
+			email,
+			phoneNumber,
+			password: hashedPassword,
+			accountType: "People",
+			additionalDetails: profile._id,
+			image: `https://api.dicebear.com/5.x/initials/svg?seed=${username}`,
+		});
+
+		// Generate JWT token
+		const token = jwt.sign(
+			{ email: user.email, id: user._id, accountType: user.accountType },
+			process.env.JWT_SECRET,
+			{ expiresIn: '24h' }
+		);
+
+		// Attach token to user and set cookie
+		user.token = token;
+		user.password = undefined; // Do not send password in response
+
+		const options = {
+			expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+			httpOnly: true,
+		};
+
+		// Respond with the token and user data
+		res.cookie("token", token, options).status(201).json({
+			success: true,
+			token,
+			user,
+			message: "User registered successfully and logged in.",
+		});
+	} catch (error) {
+		console.error("Signup Error:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Signup failed. Please try again later.",
+		});
+	}
+};
+// Controller to update gender and date of birth in profile after signup
+exports.profileDetails = async (req, res) => {
+	try {
+		const { gender, dateOfBirth } = req.body;
+		const userId = req.user.id; // Assuming you have middleware that sets `req.user`
+
+		// Validate input data
+		if (!gender || !dateOfBirth) {
+			return res.status(400).json({
+				success: false,
+				message: "Gender and Date of Birth are required.",
+			});
+		}
+
+		
+
+		// Find the user by ID
+		const user = await User.findById(userId);
+		if (!user) {
+			return res.status(404).json({
+				success: false,
+				message: "User not found.",
+			});
+		}
+
+		// Get profile associated with the user
+		const profileId = user.additionalDetails;
+		const profile = await Profile.findById(profileId);
+
+		if (!profile) {
+			return res.status(404).json({
+				success: false,
+				message: "Profile not found.",
+			});
+		}
+
+		// Update the profile details
+		profile.gender = gender;
+		profile.dateOfBirth = new Date(dateOfBirth); // Convert to Date object for consistency
+
+		// Save updated profile
+		await profile.save();
+
+		// Send success response
+		return res.status(200).json({
+			success: true,
+			message: "Profile updated successfully.",
+			profile: {
+				gender: profile.gender,
+				dateOfBirth: profile.dateOfBirth,
+			},
+		});
+	} catch (error) {
+		console.error("Error updating profile:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Failed to update profile. Please try again later.",
+		});
+	}
+};
+
+exports.communityAddress = async (req, res) => {
+	try {
+	  const { state, city, pincode } = req.body;
+	  const userId = req.user.id; // Assuming middleware sets req.user
+  
+	  // Validate input data
+	  if (!state || !city || !pincode) {
+		return res.status(400).json({
+		  success: false,
+		  message: "State, city, and pincode are required.",
+		});
+	  }
+  
+	  // Validate pincode as numeric and of valid length (assuming it's a 6-digit Indian pincode)
+	  if (isNaN(pincode) || pincode.toString().length !== 6) {
+		return res.status(400).json({
+		  success: false,
+		  message: "Invalid pincode. Pincode should be a 6-digit number.",
+		});
+	  }
+  
+	  // Update user's community address
+	  const user = await User.findByIdAndUpdate(
+		userId,
+		{
+		  state: state,
+		  city: city,
+		  postalCost: pincode,
+		},
+		{ new: true } // Returns the updated document
+	  );
+  
+	  if (!user) {
+		return res.status(404).json({
+		  success: false,
+		  message: "User not found.",
+		});
+	  }
+  
+	  // Send success response
+	  return res.status(200).json({
+		success: true,
+		message: "Community address updated successfully.",
+		user, // Return updated user details
+	  });
+	} catch (error) {
+	  console.error("Error updating community address:", error);
+	  return res.status(500).json({
+		success: false,
+		message: "Failed to update community address. Please try again later.",
+	  });
+	}
+  };
+  
+
+  exports.community = async (req, res) => {
+	try {
+	  const { community } = req.body;
+	  const userId = req.user.id;
+  
+	  // Validate input
+	  if (!community) {
+		return res.status(400).json({
+		  success: false,
+		  message: "Community name is required.",
+		});
+	  }
+  
+	  // Check if the community already exists
+	  let communityDetails = await Community.findOne({ communityName: community });
+  
+	  if (!communityDetails) {
+		// Create the community if it doesn't exist
+		communityDetails = await Community.create({ communityName: community });
+	  }
+  
+	  // Add the user to the community's userInCommunity array (if not already added)
+	  const updatedCommunity = await Community.findByIdAndUpdate(
+		communityDetails._id,
+		{ $addToSet: { userInCommunity: userId } }, // $addToSet prevents duplicates
+		{ new: true }
+	  );
+  
+	  // Also update the user's community and communityDetails fields
+	  await User.findByIdAndUpdate(
+		userId,
+		{ community: communityDetails.communityName, communityDetails: communityDetails._id },
+		{ new: true }
+	  );
+  
+	  return res.status(200).json({
+		success: true,
+		message: "Community joined/created successfully.",
+		communityDetails: updatedCommunity,
+	  });
+  
+	} catch (error) {
+	  console.error("Error updating community:", error);
+	  return res.status(500).json({
+		success: false,
+		message: "Failed to join/create community. Please try again later.",
+	  });
+	}
+  };
+
+  
+
+// Login controller for authenticating users
+exports.login = async (req, res) => {
+	try {
+		const { email, password } = req.body;
+
+		// Validate input fields
+		if (!email || !password) {
+			return res.status(400).json({
+				success: false,
+				message: "Please fill in all required fields.",
+			});
+		}
+
+		// Check if the user exists
+		const user = await User.findOne({ email }).populate("additionalDetails");
+		if (!user) {
+			return res.status(401).json({
+				success: false,
+				message: "User not registered. Please sign up.",
+			});
+		}
+
+		// Compare the provided password with the hashed password in DB
+		const isPasswordValid = await bcrypt.compare(password, user.password);
+		if (!isPasswordValid) {
+			return res.status(401).json({
+				success: false,
+				message: "Incorrect password.",
+			});
+		}
+
+		// Generate JWT token
+		const token = jwt.sign(
+			{ email: user.email, id: user._id, accountType: user.accountType },
+			process.env.JWT_SECRET,
+			{ expiresIn: '24h' }
+		);
+
+		// Set cookie options
+		const options = {
+			expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+			httpOnly: true,
+		};
+
+		// Attach token to user object and remove password from response
+		user.token = token;
+		user.password = undefined;
+
+		// Send response with token and user info
+		res.cookie("token", token, options).status(200).json({
+			success: true,
+			token,
+			user,
+			message: "User logged in successfully.",
+		});
+	} catch (error) {
+		console.error("Login Error:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Login failed. Please try again later.",
+		});
+	}
+};
+
+
+// Google OAuth2 login route
+exports.googleLogin = passport.authenticate('google', {
+	scope: ['profile', 'email'],
+  });
+
+
+
+// Google OAuth2 callback route
+exports.googleCallback = (req, res) => {
+	passport.authenticate('google', { failureRedirect: '/login' }, async (err, user, info) => {
+	  if (err) {
+		return res.status(500).json({ message: 'Internal Server Error', error: err });
+	  }
+	  if (!user) {
+		return res.status(400).json({ message: 'User not found' });
+	  }
+  
+	  if (!user.googleId) {
+		return res.status(400).json({ message: 'Google ID is required for Google login' });
+	  }
+  
+	  // Generate JWT token
+	  const token = jwt.sign(
+		{ email: user.email, id: user._id, accountType: user.accountType },
+		process.env.JWT_SECRET,
+		{ expiresIn: "24h" }
+	  );
+  
+	  user.token = token;
+	  await user.save();
+	  res.cookie("user", user, {
+		expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+		httpOnly: false,
+	  });
+	  res.cookie("token", token, {
+		expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+		httpOnly: false,
+	  });
+  
+	  if (user.communityDetails) {
+		res.redirect(`http://localhost:3000/dashboard`);
+	  } else {
+		res.redirect(`http://localhost:3000/details`);
+	  }
+	})(req, res);
+  };
+  
+
+  
+
+exports.googleDetails = async (req, res) => {
+  const { city, state, postalCost, community, phoneNumber } = req.body;
+
+  try {
+    const id = req.user.id;
+
+    if (!id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized access",
+      });
+    }
+
+    let communityDetails = await Community.findOne({ communityName: community });
+
+    if (!communityDetails) {
+      communityDetails = await Community.create({ communityName: community });
+    }
+
+    
+
+    const profileDetails = await Profile.create({
+      gender: null,
+      dateOfBirth: null,
+      about: null,
+      phoneNumber: phoneNumber,
+    });
+
+
+    const user = await User.findByIdAndUpdate(id, {
+      $set: {
+        state: state,
+        city: city,
+        community: community,
+        phoneNumber: phoneNumber,
+        postalCost: postalCost,
+        additionalDetails: profileDetails._id,
+        communityDetails: communityDetails._id // Corrected to communityDetails
+      }
+    }, { new: true });
+
+    await Community.findByIdAndUpdate(
+      communityDetails._id,
+      { $addToSet: { userInCommunity: id } },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      user,
+      message: "User registered successfully",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "User cannot be registered. Please try again.",
+    });
+  }
+};
+
+
+
+
+
+//sending otp for email verification
+// exports.sendotp = async (req, res) => {
+// 	try {
+// 		const { email } = req.body;
+
+// 		// Check if user is already present
+// 		// Find user with provided email
+// 		const checkUserPresent = await User.findOne({ email });
+// 		// to be used in case of signup
+
+// 		// If user found with provided email
+// 		if (checkUserPresent) {
+// 			// Return 401 Unauthorized status code with error message
+// 			return res.status(401).json({
+// 				success: false,
+// 				message: `User is Already Registered`,
+// 			});
+// 		}
+
+// 		var otp = otpGenerator.generate(6, {
+// 			upperCaseAlphabets: false,
+// 			lowerCaseAlphabets: false,
+// 			specialChars: false,
+// 		});
+// 		const result = await OTP.findOne({ otp: otp });
+// 		console.log("Result is Generate OTP Func");
+// 		console.log("OTP", otp);
+// 		console.log("Result", result);
+// 		while (result) {
+// 			otp = otpGenerator.generate(6, {
+// 				upperCaseAlphabets: false,
+// 			});
+// 			result = await OTP.findOne({ otp: otp });
+// 		}
+		
+// 		const otpPayload = { email, otp };
+// 		const otpBody = await OTP.create(otpPayload);
+// 		console.log("OTP Body", otpBody);
+// 		res.status(200).json({
+// 			success: true,
+// 			message: `OTP Sent Successfully`,
+// 			otp,
+// 		});
+// 	} catch (error) {
+// 		console.log(error.message);
+// 		return res.status(500).json({ success: false, error: error.message });
+// 	}
+// };
+
+
+exports.sendotp = async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+		console.log(phoneNumber, "---->");
+        
+        // Check if the user already exists with this phone number
+        const existingUser = await User.findOne({ phoneNumber });
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                message: "User already registered with this phone number.",
+            });
+        }
+
+        // Generate a 6-digit OTP
+		let otp = otpGenerator.generate(6, {
+			upperCaseAlphabets: false,
+			lowerCaseAlphabets: false,
+			specialChars: false,
+		});
+		console.log(otp, "--->>>>>>");
+        
+        // Save OTP to the database
+        const otpPayload = { phoneNumber, otp };
+        const otpp=await OTP.create(otpPayload);
+
+        // Send OTP via SMS using Twilio
+        await client.messages.create({
+            from: '+13148992511', // Your Twilio phone number
+            to: `+91${phoneNumber}`, // Ensure correct international format
+            body: `Your OTP code is ${otp}`,
+        });
+
+        res.status(200).json({
+            success: true,
+			otpp,
+            message: "OTP sent successfully.",
+        });
+    } catch (error) {
+        console.error("Error sending OTP:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to send OTP.",
+        });
+    }
+};
+
+
+//controllers for changing the password
+
+
+exports.changePassword = async (req, res) => {
+	try {
+		// Get user data from req.user
+		const userDetails = await User.findById(req.user.id);
+
+		// Get old password, new password, and confirm new password from req.body
+		const { oldPassword, newPassword, confirmNewPassword } = req.body;
+
+		// Validate old password
+		const isPasswordMatch = await bcrypt.compare(
+			oldPassword,
+			userDetails.password
+		);
+		if (!isPasswordMatch) {
+			// If old password does not match, return a 401 (Unauthorized) error
+			return res
+				.status(401)
+				.json({ success: false, message: "The password is incorrect" });
+		}
+
+		// Match new password and confirm new password
+		if (newPassword !== confirmNewPassword) {
+			// If new password and confirm new password do not match, return a 400 (Bad Request) error
+			return res.status(400).json({
+				success: false,
+				message: "The password and confirm password does not match",
+			});
+		}
+
+		// Update password
+		const encryptedPassword = await bcrypt.hash(newPassword, 10);
+		const updatedUserDetails = await User.findByIdAndUpdate(
+			req.user.id,
+			{ password: encryptedPassword },
+			{ new: true }
+		);
+
+		// Send notification email
+		try {
+			const name = `${updatedUserDetails.firstName}`
+			const emailResponse = await mailSender(
+				updatedUserDetails.email,
+				'Password Updated',
+				passwordUpdated(
+					updatedUserDetails.email,
+					name,
+				)
+			);
+			console.log("Email sent successfully:", emailResponse.response);
+		} catch (error) {
+			// If there's an error sending the email, log the error and return a 500 (Internal Server Error) error
+			console.error("Error occurred while sending email:", error);
+			return res.status(500).json({
+				success: false,
+				message: "Error occurred while sending email",
+				error: error.message,
+			});
+		}
+
+		// Return success response
+		return res
+			.status(200)
+			.json({ success: true, message: "Password updated successfully" });
+	} catch (error) {
+		// If there's an error updating the password, log the error and return a 500 (Internal Server Error) error
+		console.error("Error occurred while updating password:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Error occurred while updating password",
+			error: error.message,
+		});
+	}
+};
+
+
+// for searching of the users
+exports.searchUsers = async (req, res) => {
+    const userId = req.user.id;
+    try {
+        // Await the promise returned by User.findById
+        const userDetail = await User.findById(userId);
+        
+        // console.log(userDetail);
+        const keyword = req.query.search ? {
+            $or: [
+                { firstName: { $regex: new RegExp(req.query.search, 'i') } },
+                { lastName: { $regex: new RegExp(req.query.search, 'i') } },
+                { email: { $regex: new RegExp(req.query.search, 'i') } },
+                { community: { $regex: new RegExp(req.query.search, 'i') } },
+            ]
+        } : {};
+
+        // Check if userDetail is populated properly
+        console.log(userDetail.communityDetails); 
+        
+        const users = await User.find({ $and: [keyword, { _id: { $ne: req.user.id } },{communityDetails:userDetail.communityDetails}] }).populate("communityDetails");
+        res.send(users);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Server Error in searching the community");
+    }
+};
+
+
+
+
