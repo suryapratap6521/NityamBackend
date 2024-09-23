@@ -15,7 +15,9 @@ const {
   googleDetails,
   profileDetails,
   communityAddress,
-  community
+  community,
+  verification,
+  profession
 } = require("../controllers/Auth")
 const {
   resetPasswordToken,
@@ -47,6 +49,10 @@ router.put("/profiledetails",auth,profileDetails)
 router.put("/communityaddress",auth,communityAddress);
 
 router.put('/community',auth,community);
+
+router.put('/verification',auth,verification);
+
+router.put('/profession',auth,profession);
 
 // ********************************************************************************************************
 //                                      Reset Password

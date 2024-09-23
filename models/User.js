@@ -2,12 +2,8 @@ const mongoose = require('mongoose');
 const { isEmail } = require('validator');
 
 const userSchema = new mongoose.Schema({
-  firstName: {
-    type: String,
-    // required: true,
-    trim: true,
-  },
-  lastName: {
+
+  username: {
     type: String,
     // required: true,
     trim: true,
@@ -57,17 +53,17 @@ const userSchema = new mongoose.Schema({
   resetPasswordExpires: {
     type: Date,
   },
-  panUrl: {
+  documentUrl: {
     type: String,
     default: ""
   },
-  aadharUrl: {
-    type: String,
-    default: ""
+  Address:{
+    type:String,
+    default:"",
   },
-  verification: {
+  verificationByPostalCard: {
     type: String,
-    default: "N"
+    default: "No"
   },
   phoneNumber: {
     type: String,

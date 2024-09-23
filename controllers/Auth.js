@@ -10,6 +10,7 @@ const Profile = require("../models/Profile");
 const passport=require("passport");
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const twilio = require('twilio');
+const { uploadFilesToCloudinary } = require("../utils/imageUploader");
 
 
 require("dotenv").config();
@@ -440,6 +441,110 @@ exports.communityAddress = async (req, res) => {
 	}
   };
 
+  exports.verification = async (req, res) => {
+	try {
+	  const { verificationByPostalCard, address } = req.body;
+	  const userId = req.user.id;
+	  let documentUrl = "";
+		
+	  // Check if a document file is provided
+	  if (req.files && req.files.document) {
+		const documentImage = req.files.document;
+		
+		// Assuming `uploadFilesToCloudinary` is an existing utility function that uploads to Cloudinary
+		const uploadedDocs = await uploadFilesToCloudinary(documentImage, process.env.FOLDER_NAME);
+  
+		// Check if the document was successfully uploaded
+		if (uploadedDocs.length > 0) {
+		  documentUrl = uploadedDocs[0].secure_url;
+		} else {
+		  return res.status(400).json({
+			success: false,
+			message: "Document upload failed. Please try again.",
+		  });
+		}
+	  }
+  
+	  // Fetch user details from the database
+	  const userDetails = await User.findById(userId);
+  
+	  if (!userDetails) {
+		return res.status(404).json({
+		  success: false,
+		  message: "User not found.",
+		});
+	  }
+  
+	  // Update user details with the provided verification data
+	  userDetails.documentUrl = documentUrl || userDetails.documentUrl;  // Update only if a new document is uploaded
+	  userDetails.address = address || userDetails.address;  // Update address if provided
+	  userDetails.verificationByPostalCard = verificationByPostalCard || userDetails.verificationByPostalCard; // Update verification status
+  
+	  // Save updated user details
+	  await userDetails.save();
+  
+	  return res.status(200).json({
+		success: true,
+		message: "Verification details updated successfully.",
+		user: userDetails,
+	  });
+	} catch (error) {
+	  console.error("Verification Error:", error);
+	  return res.status(500).json({
+		success: false,
+		message: "Verification failed. Please try again later.",
+	  });
+	}
+  };
+
+  exports.profession = async (req, res) => {
+	try {
+	  const { profession, hourlyCharge } = req.body;
+	  const userId = req.user.id;
+  
+	  // Check if profession and hourlyCharge are provided
+	  if (!profession || !hourlyCharge) {
+		return res.status(400).json({
+		  success: false,
+		  message: "Profession and hourly charge are required.",
+		});
+	  }
+  
+	  // Update user details with profession and hourly charge
+	  const userDetails = await User.findByIdAndUpdate(
+		userId,
+		{
+		  profession: profession,
+		  hourlyCharge: hourlyCharge,
+		},
+		{ new: true } // This returns the updated document
+	  ).exec();
+  
+	  // Check if the user was found and updated
+	  if (!userDetails) {
+		return res.status(404).json({
+		  success: false,
+		  message: "User not found.",
+		});
+	  }
+	  
+  
+	  // Respond with the updated user details
+	  return res.status(200).json({
+		success: true,
+		userDetails,
+		message: "Profession and hourly charge added successfully.",
+	  });
+	} catch (error) {
+	  console.error("Error updating profession:", error);
+	  return res.status(500).json({
+		success: false,
+		message: "An error occurred while updating profession.",
+	  });
+	}
+  };
+  
+  
   
 
 // Login controller for authenticating users
