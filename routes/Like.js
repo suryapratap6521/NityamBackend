@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { setLike, setUnlike } = require("../controllers/like");
+const { setLike, setUnlike } = require("../controllers/Like");
 const { auth } = require("../middlewares/auth");
 
 router.post("/setlike",auth ,setLike);
