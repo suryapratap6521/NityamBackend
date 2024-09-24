@@ -783,7 +783,8 @@ exports.sendotp = async (req, res) => {
 		console.log(phoneNumber, "---->");
         
         // Check if the user already exists with this phone number
-        const existingUser = await User.findOne({ phoneNumber });
+        const existingUser = await User.findOne({phoneNumber});
+		console.log(existingUser,"----->ppopop");
         if (existingUser) {
             return res.status(400).json({
                 success: false,
