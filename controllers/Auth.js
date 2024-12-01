@@ -175,10 +175,10 @@ const mongoose = require('mongoose');
 // Signup controller for registering new users
 exports.signup = async (req, res) => {
 	try {
-		const { username, email, phoneNumber, password, confirmPassword, otp } = req.body;
+		const { firstName, lastName, email, phoneNumber, password, confirmPassword, otp } = req.body;
 		console.log(req.body)
 		// Basic validation
-		if (!username || !email || !phoneNumber || !password || !confirmPassword) {
+		if (!firstName || !lastName || !email || !phoneNumber || !password || !confirmPassword) {
 			return res.status(400).json({
 				success: false,
 				message: "All fields are required.",
@@ -212,7 +212,7 @@ exports.signup = async (req, res) => {
 		}
 
 		// Validate OTP for the phone number
-		const latestOTP = await OTP.findOne({ }).sort({ createdAt: -1 });
+		const latestOTP = await OTP.findOne({phoneNumber}).sort({ createdAt: -1 });
 		console.log(otp,"---------otp");
 		console.log(latestOTP,"------>latest");
 		if (!latestOTP || otp !== latestOTP.otp) {
@@ -235,13 +235,14 @@ exports.signup = async (req, res) => {
 
 		// Create new user
 		const user = await User.create({
-			username,
+			firstName,
+			lastName,
 			email,
 			phoneNumber,
 			password: hashedPassword,
 			accountType: "People",
 			additionalDetails: profile._id,
-			image: `https://api.dicebear.com/5.x/initials/svg?seed=${username}`,
+			image: `https://api.dicebear.com/5.x/initials/svg?seed=${firstName} ${lastName}`,
 		});
 
 		// Generate JWT token
@@ -277,8 +278,10 @@ exports.signup = async (req, res) => {
 };
 // Controller to update gender and date of birth in profile after signup
 exports.profileDetails = async (req, res) => {
+	console.log("dasdasd");
 	try {
 		const { gender, dateOfBirth } = req.body;
+		console.log(req.body,"-----adasdad");
 		const userId = req.user.id; // Assuming you have middleware that sets `req.user`
 
 		// Validate input data

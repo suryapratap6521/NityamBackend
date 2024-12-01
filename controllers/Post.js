@@ -3,67 +3,154 @@ const Community = require("../models/Community");
 const Post = require("../models/Post");
 const User = require("../models/User");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
+const Notification = require('../models/Notification');
+const NotificationController = require('../controllers/notificationController');
 require("dotenv").config();
 
 
+// exports.createPost = async (req, res) => {
+//   try {
+//       const { title,postType,eventName,location,startDate,EndDate,hostedBy,venue } = req.body;
+//       const userId = req.user.id;
+
+      
+
+//       if (!userId) {
+//           return res.status(404).json({
+//               success: false,
+//               message: "User is not registered",
+//           });
+//       }
+
+//      // Check if files are present
+//      const postFiles = req.files ? (Array.isArray(req.files.postFiles) ? req.files.postFiles : [req.files.postFiles]) : [];
+
+//      // If there are no files and no title, return an error
+//      if (postFiles.length === 0 && !title) {
+//          return res.status(400).json({
+//              success: false,
+//              message: "Either title or any image or video is required",
+//          });
+//      }
+
+//      // Upload files to Cloudinary if present
+//      let uploadDetails = [];
+//      if (postFiles.length > 0) {
+//          uploadDetails = await uploadFilesToCloudinary(postFiles, process.env.FOLDER_NAME);
+//      }
+
+//       // Create post with the uploaded file URLs
+//       const post = await Post.create({
+//           title: title || "Untitled",
+//           imgPath: uploadDetails.map(detail => detail.secure_url) || [],
+//           postByUser: userId,
+//       });
+
+//       await User.findByIdAndUpdate(userId, { $push: { postByUser: post._id } });
+
+//       const userDetails = await User.findById(userId).populate("postByUser");
+//       const communityDetails = await Community.findByIdAndUpdate(
+//           { _id: userDetails.communityDetails },
+//           { $push: { posts: post._id } },
+//           { new: true }
+//       ).populate("posts");
+
+//       return res.status(200).json({
+//           success: true,
+//           message: "Successfully created the post",
+//           data: post,
+//       });
+//   } catch (error) {
+//       console.error(error);
+//       return res.status(500).json({
+//           success: false,
+//           message: "Internal server error",
+//       });
+//   }
+// };
+
+
+// createPost controller for handling media files in both posts and events
+// controllers/Post.js
 exports.createPost = async (req, res) => {
   try {
-      const { title } = req.body;
-      const userId = req.user.id;
+    const { postType, title, location, startDate, endDate, hostedBy, venue, description, pollOptions } = req.body;
+    const userId = req.user.id;
 
-      if (!userId) {
-          return res.status(404).json({
-              success: false,
-              message: "User is not registered",
-          });
+    if (!userId) {
+      return res.status(404).json({
+        success: false,
+        message: "User is not registered",
+      });
+    }
+
+    let postData = { postType, title: title || "", postByUser: userId };
+
+    if (postType === 'poll') {
+      if (!pollOptions || pollOptions.length < 2) {
+        return res.status(400).json({ error: 'At least two poll options are required.' });
       }
-
-     // Check if files are present
-     const postFiles = req.files ? (Array.isArray(req.files.postFiles) ? req.files.postFiles : [req.files.postFiles]) : [];
-
-     // If there are no files and no title, return an error
-     if (postFiles.length === 0 && !title) {
-         return res.status(400).json({
-             success: false,
-             message: "Either title or any image or video is required",
-         });
-     }
-
-     // Upload files to Cloudinary if present
-     let uploadDetails = [];
-     if (postFiles.length > 0) {
-         uploadDetails = await uploadFilesToCloudinary(postFiles, process.env.FOLDER_NAME);
-     }
-
-      // Create post with the uploaded file URLs
-      const post = await Post.create({
-          title: title || "Untitled",
-          imgPath: uploadDetails.map(detail => detail.secure_url) || [],
-          postByUser: userId,
-      });
-
-      await User.findByIdAndUpdate(userId, { $push: { postByUser: post._id } });
-
-      const userDetails = await User.findById(userId).populate("postByUser");
-      const communityDetails = await Community.findByIdAndUpdate(
-          { _id: userDetails.communityDetails },
-          { $push: { posts: post._id } },
-          { new: true }
-      ).populate("posts");
-
-      return res.status(200).json({
-          success: true,
-          message: "Successfully created the post",
-          data: post,
-      });
-  } catch (error) {
-      console.error(error);
-      return res.status(500).json({
+      postData.pollOptions = pollOptions.map(option => ({ option }));
+    } else if (postType === 'event') {
+      if (!location || !startDate || !endDate || !hostedBy || !venue) {
+        return res.status(400).json({ error: 'Event details are required.' });
+      }
+      postData = { ...postData, location, startDate, endDate, hostedBy, venue, description };
+      const eventFiles = req.files ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
+      if (eventFiles.length > 0) {
+        const uploadDetails = await uploadFilesToCloudinary(eventFiles, process.env.FOLDER_NAME);
+        postData.imgPath = uploadDetails.map(detail => detail.secure_url);
+      }
+    } else {
+      const postFiles = req.files ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
+      if (postFiles.length === 0 && !title) {
+        return res.status(400).json({
           success: false,
-          message: "Internal server error",
-      });
+          message: "Either title or any image or video is required",
+        });
+      }
+      if (postFiles.length > 0) {
+        const uploadDetails = await uploadFilesToCloudinary(postFiles, process.env.FOLDER_NAME);
+        postData.imgPath = uploadDetails.map(detail => detail.secure_url);
+      }
+    }
+
+    const post = await Post.create(postData);
+    const userDetails = await User.findByIdAndUpdate(userId, { $push: { postByUser: post._id } });
+    await Community.findByIdAndUpdate(
+      { _id: userDetails.communityDetails },
+      { $push: { posts: post._id } },
+      { new: true }
+    ).populate("posts");
+
+    const notificationMessage = `${userDetails.firstName} ${userDetails.lastName} created a new ${postType} in your community.`;
+
+    // Send notification via socket to all users in the community
+   // Emit notification to community members
+global.io.to(userDetails.communityDetails).emit("newNotification", {
+  message: notificationMessage,
+  postType,
+  postId: post._id,
+});
+
+    console.log("Notification emitted to room:", userDetails.communityDetails);
+
+
+    return res.status(200).json({
+      success: true,
+      message: "Successfully created the post",
+      postData: post,
+    });
+
+  } catch (error) {
+    console.error('Error creating post:', error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
+
 
 
 
