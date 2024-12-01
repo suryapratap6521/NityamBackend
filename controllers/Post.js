@@ -3,8 +3,8 @@ const Community = require("../models/Community");
 const Post = require("../models/Post");
 const User = require("../models/User");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
-const Notification = require('../models/Notification');
-const NotificationController = require('../controllers/notificationController');
+// const Notification = require('../models/Notification');
+// const NotificationController = require('../controllers/notificationController');
 require("dotenv").config();
 
 
@@ -123,17 +123,17 @@ exports.createPost = async (req, res) => {
       { new: true }
     ).populate("posts");
 
-    const notificationMessage = `${userDetails.firstName} ${userDetails.lastName} created a new ${postType} in your community.`;
+    // const notificationMessage = `${userDetails.firstName} ${userDetails.lastName} created a new ${postType} in your community.`;
 
     // Send notification via socket to all users in the community
    // Emit notification to community members
-global.io.to(userDetails.communityDetails).emit("newNotification", {
-  message: notificationMessage,
-  postType,
-  postId: post._id,
-});
+// global.io.to(userDetails.communityDetails).emit("newNotification", {
+//   message: notificationMessage,
+//   postType,
+//   postId: post._id,
+// });
 
-    console.log("Notification emitted to room:", userDetails.communityDetails);
+    // console.log("Notification emitted to room:", userDetails.communityDetails);
 
 
     return res.status(200).json({

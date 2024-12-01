@@ -71,6 +71,7 @@ app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/services", serviceRoutes);
 app.use("/api/v1/page",pageRoutes);
 
+
 // Default Route
 app.get("/", (req, res) => {
     return res.json({
