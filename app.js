@@ -35,17 +35,17 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(
     cors({
-      origin: ['http://localhost:3000'], // Add your frontend URL here
-      methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
-      credentials: true, // Allow cookies
+        origin: "*",
+        credentials: true,
     })
-  );
+);
 
 app.use(
     fileUpload({
         useTempFiles: true,
-        tempFileDir: path.join(__dirname, 'tmp'),
+        tempFileDir: "/temp",
         createParentPath: true, 
+        
     })
 );
 
