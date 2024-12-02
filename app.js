@@ -35,10 +35,11 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(
     cors({
-        origin: "*",
-        credentials: true,
+      origin: ['http://localhost:3000'], // Add your frontend URL here
+      methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
+      credentials: true, // Allow cookies
     })
-);
+  );
 
 app.use(
     fileUpload({
