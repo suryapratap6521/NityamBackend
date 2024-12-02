@@ -3,7 +3,7 @@ const express = require("express");
 const app = express();
 const http = require("http"); // Add this line
 const server = http.createServer(app); // Update this line
-
+const path = require('path');
 const userRoutes = require("./routes/User");
 const postRoutes = require('./routes/Post');
 const likeRoutes = require('./routes/Like');
@@ -43,7 +43,7 @@ app.use(
 app.use(
     fileUpload({
         useTempFiles: true,
-        tempFileDir: "/temp",
+        tempFileDir: path.join(__dirname, 'tmp'),
         createParentPath: true, 
         
     })
