@@ -423,7 +423,7 @@ exports.communityAddress = async (req, res) => {
 	  );
   
 	  // Also update the user's community and communityDetails fields
-	  await User.findByIdAndUpdate(
+	  const userDetails= await User.findByIdAndUpdate(
 		userId,
 		{ community: communityDetails.communityName, communityDetails: communityDetails._id },
 		{ new: true }
@@ -432,6 +432,7 @@ exports.communityAddress = async (req, res) => {
 	  return res.status(200).json({
 		success: true,
 		message: "Community joined/created successfully.",
+		userDetails,
 		communityDetails: updatedCommunity,
 	  });
   
@@ -564,7 +565,7 @@ exports.login = async (req, res) => {
 		}
 
 		// Check if the user exists
-		const user = await User.findOne({ email }).populate("additionalDetails");
+		const user = await User.findOne({ email }).populate("additionalDetails").populate('communityDetails');
 		if (!user) {
 			return res.status(401).json({
 				success: false,
