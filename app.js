@@ -3,7 +3,7 @@ const express = require("express");
 const app = express();
 const http = require("http"); // Add this line
 const server = http.createServer(app); // Update this line
-
+const path = require('path');
 const userRoutes = require("./routes/User");
 const postRoutes = require('./routes/Post');
 const likeRoutes = require('./routes/Like');
@@ -12,6 +12,7 @@ const chatRoutes = require("./routes/Chat");
 const messageRoutes = require("./routes/Message");
 const profileRoutes = require("./routes/Profile");
 const serviceRoutes = require("./routes/Services");
+const accessToken=require('./routes/Get_AccessToken');
 const pageRoutes=require("./routes/Page");
 
 const database = require("./config/database");
@@ -43,7 +44,9 @@ app.use(
 app.use(
     fileUpload({
         useTempFiles: true,
-        tempFileDir: "/temp",
+        tempFileDir: path.join(__dirname, 'tmp'),
+        createParentPath: true, 
+        
     })
 );
 
@@ -70,6 +73,7 @@ app.use("/api/v1/message", messageRoutes);
 app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/services", serviceRoutes);
 app.use("/api/v1/page",pageRoutes);
+app.use("/api/v1/token",accessToken);
 
 
 // Default Route
