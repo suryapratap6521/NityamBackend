@@ -12,6 +12,7 @@ const chatRoutes = require("./routes/Chat");
 const messageRoutes = require("./routes/Message");
 const profileRoutes = require("./routes/Profile");
 const serviceRoutes = require("./routes/Services");
+const accessToken=require('./routes/Get_AccessToken');
 const pageRoutes=require("./routes/Page");
 
 const database = require("./config/database");
@@ -72,6 +73,7 @@ app.use("/api/v1/message", messageRoutes);
 app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/services", serviceRoutes);
 app.use("/api/v1/page",pageRoutes);
+app.use("/api/v1/token",accessToken);
 
 
 // Default Route

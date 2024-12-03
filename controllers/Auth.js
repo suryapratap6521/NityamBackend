@@ -178,7 +178,7 @@ exports.signup = async (req, res) => {
 		const { firstName, lastName, email, phoneNumber, password, confirmPassword, otp } = req.body;
 		console.log(req.body)
 		// Basic validation
-		if (!firstName || !lastName || !email || !phoneNumber || !password || !confirmPassword) {
+		if (!firstName || !email || !phoneNumber || !password || !confirmPassword) {
 			return res.status(400).json({
 				success: false,
 				message: "All fields are required.",
@@ -427,7 +427,7 @@ exports.communityAddress = async (req, res) => {
 		userId,
 		{ community: communityDetails.communityName, communityDetails: communityDetails._id },
 		{ new: true }
-	  );
+	  ).populate("communityDetails").populate("additionalDetails")
   
 	  return res.status(200).json({
 		success: true,
@@ -470,7 +470,7 @@ exports.communityAddress = async (req, res) => {
 	  }
   
 	  // Fetch user details from the database
-	  const userDetails = await User.findById(userId);
+	  const userDetails = await User.findById(userId).populate("communityDetails").populate("additionalDetails");
   
 	  if (!userDetails) {
 		return res.status(404).json({
@@ -522,7 +522,7 @@ exports.communityAddress = async (req, res) => {
 		  hourlyCharge: hourlyCharge,
 		},
 		{ new: true } // This returns the updated document
-	  ).exec();
+	  ).populate("communityDetails").populate("additionalDetails");
   
 	  // Check if the user was found and updated
 	  if (!userDetails) {
@@ -911,10 +911,11 @@ exports.changePassword = async (req, res) => {
 // for searching of the users
 exports.searchUsers = async (req, res) => {
     const userId = req.user.id;
+	console.log(userId);
     try {
         // Await the promise returned by User.findById
         const userDetail = await User.findById(userId);
-        
+        console.log(userDetail);
         // console.log(userDetail);
         const keyword = req.query.search ? {
             $or: [
