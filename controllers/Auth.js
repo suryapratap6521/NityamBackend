@@ -810,7 +810,7 @@ exports.sendotp = async (req, res) => {
 
         // Send OTP via SMS using Twilio
         await client.messages.create({
-            from: '+13148992511', // Your Twilio phone number
+            from: '+14177398093', // Your Twilio phone number  +13148992511
             to: `+91${phoneNumber}`, // Ensure correct international format
             body: `Your OTP code is ${otp}`,
         });
