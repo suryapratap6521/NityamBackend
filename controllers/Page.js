@@ -1,8 +1,5 @@
 const Page = require("../models/Page"); 
-const {uploadFilesToCloudinary} = require("../utils/imageUploader"); 
-
-const Page = require("../models/Page");
-const { uploadFilesToCloudinary } = require("../utils/cloudinary"); // Assuming a utility function for Cloudinary upload
+const { uploadFilesToCloudinary } = require("../utils/imageUploader"); 
 
 exports.createPage = async (req, res) => {
   try {
