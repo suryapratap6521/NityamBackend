@@ -103,6 +103,13 @@ const userSchema = new mongoose.Schema({
       ref: "Post",
     }
   ],
+  pages:
+  [
+  {
+    type:mongoose.Schema.Types.ObjectId,
+    ref:"Page"
+  },
+ ]
 });
 
 const User = mongoose.model('User', userSchema);

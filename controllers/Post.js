@@ -259,6 +259,9 @@ exports.deletePost = async (req, res) => {
     const { postId } = req.body; // Access postId from the request parameters
     const userId = req.user.id;
 
+    console.log(userId,"-->user");
+    console.log(postId,"-->post");
+
     if (!postId || !userId) {
       return res.status(404).json({
         success: false,

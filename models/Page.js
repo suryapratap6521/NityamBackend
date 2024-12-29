@@ -1,56 +1,43 @@
 const mongoose = require("mongoose");
 
-const PageSchema = new mongoose.Schema(
-  {
-    businessName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    businessType: {
-      type: String,
-      required: true,
-    },
-    businessBio: {
-      type: String,
-      required: true,
-    },
-    contactInformation: {
-      website: {
-        type: String,
-      },
-      phoneNumber: {
-        type: String,
-        required: true,
-      },
-      emailAddress: {
-        type: String,
-        required: true,
-      },
-    },
-    location: {
-      address: {
-        type: String,
-        required: true,
-      },
-      town: {
-        type: String,
-        required: true,
-      },
-      city: {
-        type: String,
-        required: true,
-      },
-      postcode: {
-        type: String,
-        required: true,
-      },
-    },
-    profilePicture: {
-      type: String,
-      required: true,
-    },
-  },
+const PageSchema = new mongoose.Schema({
+   
+businessName:{
+  type:String,
+},
+businessCategory:{
+  type:String,
+},
+businessDescription:{
+  type:String,
+},
+businessUrl:{
+  type:String,
+},
+businessPhoneNumber:{
+  type:Number,
+},
+businessEmail:{
+  type:String,
+},
+business:{
+  type:String,
+},
+businessAddress:{
+  type:String,
+},
+businessCity:{
+  type:String
+},
+businessPostCode:{
+  type:String,
+},
+businessProfilePicture:{
+  type:String,
+}
+
+
+},
   { timestamps: true }
 );
 
