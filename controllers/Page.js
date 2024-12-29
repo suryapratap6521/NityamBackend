@@ -1,9 +1,9 @@
 const Page = require("../models/Page");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
+const User = require("../models/User");
 
 exports.createPage = async (req, res) => {
   try {
-
     // Destructure and validate required fields
     const {
       businessName,
@@ -16,14 +16,15 @@ exports.createPage = async (req, res) => {
       businessCity,
       businessPostCode,
     } = req.body;
+    const userId = req.user.id;
 
     if (
       !businessName ||
       !businessCategory ||
       !businessPhoneNumber ||
-      !businessEmail||
-      !businessAddress||
-      !businessCity||
+      !businessEmail ||
+      !businessAddress ||
+      !businessCity ||
       !businessPostCode
     ) {
       return res.status(400).json({
@@ -41,9 +42,6 @@ exports.createPage = async (req, res) => {
     }
 
     const businessProfilePicture = req.files.businessProfilePicture;
-
-    // Log file details for debugging
-    // console.log("Uploaded File:", businessProfilePicture);
 
     // Upload the profile picture to Cloudinary
     const [imageUploadResult] = await uploadFilesToCloudinary(
@@ -75,11 +73,19 @@ exports.createPage = async (req, res) => {
     // Save the new page to the database
     const savedPage = await newPage.save();
 
+    // Add the page ID to the user's pages array
+    const userDetails = await User.findByIdAndUpdate(
+      userId,
+      { $push: { pages: savedPage._id } },
+      { new: true }
+    ).populate("pages");
+
     // Respond with success and return the saved page data
     return res.status(201).json({
       success: true,
       message: "Business page created successfully.",
       data: savedPage,
+      userDetails,
     });
   } catch (error) {
     // Log the error for debugging purposes
