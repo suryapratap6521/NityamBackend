@@ -20,9 +20,6 @@ businessPhoneNumber:{
 businessEmail:{
   type:String,
 },
-business:{
-  type:String,
-},
 businessAddress:{
   type:String,
 },
@@ -35,8 +32,6 @@ businessPostCode:{
 businessProfilePicture:{
   type:String,
 }
-
-
 },
   { timestamps: true }
 );
