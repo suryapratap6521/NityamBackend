@@ -1,9 +1,12 @@
 const Page = require("../models/Page"); 
 const {uploadFilesToCloudinary} = require("../utils/imageUploader"); 
 
+const Page = require("../models/Page");
+const { uploadFilesToCloudinary } = require("../utils/cloudinary"); // Assuming a utility function for Cloudinary upload
+
 exports.createPage = async (req, res) => {
   try {
-    // Extract business details from the request body
+    // Ensure all required fields are present
     const {
       businessName,
       businessCategory,
@@ -16,7 +19,20 @@ exports.createPage = async (req, res) => {
       businessPostCode,
     } = req.body;
 
-    // Check if the profile picture is included in the request
+    if (
+      !businessName ||
+      !businessCategory ||
+      !businessDescription ||
+      !businessPhoneNumber ||
+      !businessEmail
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be provided.",
+      });
+    }
+
+    // Validate file presence
     if (!req.files || !req.files.businessProfilePicture) {
       return res.status(400).json({
         success: false,
@@ -31,7 +47,14 @@ exports.createPage = async (req, res) => {
       process.env.FOLDER_NAME
     );
 
-    // Create a new page document with the Cloudinary URL
+    if (!imageUploadResult || !imageUploadResult.secure_url) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to upload the profile picture.",
+      });
+    }
+
+    // Create a new page document with the provided data and Cloudinary URL
     const newPage = new Page({
       businessName,
       businessCategory,
@@ -42,20 +65,20 @@ exports.createPage = async (req, res) => {
       businessAddress,
       businessCity,
       businessPostCode,
-      businessProfilePicture: imageUploadResult.secure_url, 
+      businessProfilePicture: imageUploadResult.secure_url,
     });
 
     // Save the new page to the database
     const savedPage = await newPage.save();
 
-    // Respond with success
+    // Respond with success and return the saved page
     return res.status(201).json({
       success: true,
       message: "Business page created successfully.",
       data: savedPage,
     });
   } catch (error) {
-    console.error("Error in addProfile:", error.message);
+    console.error("Error in createPage:", error.message);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
