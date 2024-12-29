@@ -1,9 +1,10 @@
-const Page = require("../models/Page"); 
-const { uploadFilesToCloudinary } = require("../utils/imageUploader"); 
+const Page = require("../models/Page");
+const { uploadFilesToCloudinary } = require("../utils/imageUploader");
 
 exports.createPage = async (req, res) => {
   try {
-    // Ensure all required fields are present
+
+    // Destructure and validate required fields
     const {
       businessName,
       businessCategory,
@@ -19,9 +20,11 @@ exports.createPage = async (req, res) => {
     if (
       !businessName ||
       !businessCategory ||
-      !businessDescription ||
       !businessPhoneNumber ||
-      !businessEmail
+      !businessEmail||
+      !businessAddress||
+      !businessCity||
+      !businessPostCode
     ) {
       return res.status(400).json({
         success: false,
@@ -29,7 +32,7 @@ exports.createPage = async (req, res) => {
       });
     }
 
-    // Validate file presence
+    // Check for the presence of profile picture
     if (!req.files || !req.files.businessProfilePicture) {
       return res.status(400).json({
         success: false,
@@ -37,10 +40,14 @@ exports.createPage = async (req, res) => {
       });
     }
 
-    // Upload the profile picture to Cloudinary
     const businessProfilePicture = req.files.businessProfilePicture;
-    const imageUploadResult = await uploadFilesToCloudinary(
-      businessProfilePicture,
+
+    // Log file details for debugging
+    // console.log("Uploaded File:", businessProfilePicture);
+
+    // Upload the profile picture to Cloudinary
+    const [imageUploadResult] = await uploadFilesToCloudinary(
+      [businessProfilePicture], // Ensure it's treated as an array
       process.env.FOLDER_NAME
     );
 
@@ -51,7 +58,7 @@ exports.createPage = async (req, res) => {
       });
     }
 
-    // Create a new page document with the provided data and Cloudinary URL
+    // Create a new page with uploaded image URL and other details
     const newPage = new Page({
       businessName,
       businessCategory,
@@ -68,17 +75,21 @@ exports.createPage = async (req, res) => {
     // Save the new page to the database
     const savedPage = await newPage.save();
 
-    // Respond with success and return the saved page
+    // Respond with success and return the saved page data
     return res.status(201).json({
       success: true,
       message: "Business page created successfully.",
       data: savedPage,
     });
   } catch (error) {
-    console.error("Error in createPage:", error.message);
+    // Log the error for debugging purposes
+    console.error("Error in createPage:", error);
+
+    // Respond with a generic error message
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
+      error: error.message,
     });
   }
 };
