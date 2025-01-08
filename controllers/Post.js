@@ -3,6 +3,7 @@ const Community = require("../models/Community");
 const Post = require("../models/Post");
 const User = require("../models/User");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
+const AdvertisedPost=require("../models/AdvertisedPost");
 // const Notification = require('../models/Notification');
 // const NotificationController = require('../controllers/notificationController');
 require("dotenv").config();
@@ -194,44 +195,86 @@ exports.getCommunityPost = async (req, res) => {
     const communityId = userDetails.communityDetails;
 
     const communityDetails = await Community.findById(communityId)
-      .populate({
-        path: "posts",
-        populate: [
-          {
-            path: "postByUser",
-            select: "firstName lastName email city state community image",
-            populate: { path: "communityDetails" }
-          },
-          {
-            path: "like"
-          },
-          {
-            path: "comments",
-            populate: [
-              {
-                path: "commentedBy",
-                select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" }
-              },
-              
-              {
-                path: "replies",
-                populate: [
-                  {
-                    path: "repliedBy",
-                    select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" }
-                  },
-                  
-                ]
-              }
-            ]
-          }
-        ]
-      })
-      .exec();
-
-    const communityPost = communityDetails.posts;
+    .populate({
+      path: "posts",
+      populate: [
+        {
+          path: "postByUser",
+          select: "firstName lastName email city state community image",
+          populate: { path: "communityDetails" }
+        },
+        {
+          path: "like"
+        },
+        {
+          path: "comments",
+          populate: [
+            {
+              path: "commentedBy",
+              select: "firstName lastName email city state communityDetails image",
+              populate: { path: "communityDetails" }
+            },
+            {
+              path: "replies",
+              populate: [
+                {
+                  path: "repliedBy",
+                  select: "firstName lastName email city state communityDetails image",
+                  populate: { path: "communityDetails" }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+    .populate({
+      path: "advertisedPosts",
+      populate: [
+        {
+          path: "createdBy",
+          select: "firstName lastName email city state communityDetails image",
+          populate: { path: "communityDetails" }
+        },
+        {
+          path: "like",
+          select: "firstName lastName email image" // Assuming you want basic user details for likes
+        },
+        {
+          path: "comments",
+          populate: [
+            {
+              path: "commentedBy",
+              select: "firstName lastName email city state communityDetails image",
+              populate: { path: "communityDetails" }
+            },
+            {
+              path: "replies",
+              populate: [
+                {
+                  path: "repliedBy",
+                  select: "firstName lastName email city state communityDetails image",
+                  populate: { path: "communityDetails" }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          path: "communities",
+          select: "communityName" // Populating community details if required
+        },
+        {
+          path: "pageId",
+          select: "name description image", // Replace with fields available in the `Page` schema
+        }
+      ]
+    })
+    .exec();
+  
+  const communityPost = communityDetails.posts;
+  const communityAdvertisedPosts = communityDetails.advertisedPosts;
+  
 
    
 
@@ -240,6 +283,7 @@ exports.getCommunityPost = async (req, res) => {
       success: true,
       message: "Successfully retrieved all community posts",
       communityPost,
+      communityAdvertisedPosts,
     });
   } catch (error) {
     // Handle errors
@@ -313,5 +357,94 @@ exports.deletePost = async (req, res) => {
       success: false,
       message: "Internal Server error in deleting post",
     });
+  }
+};
+
+
+
+
+
+
+exports.createAdv = async (req, res) => {
+  try {
+    const { optionType, states, cities, communities, postId } = req.body;
+
+    if (!postId) {
+      return res.status(400).json({ message: "Post ID is required." });
+    }
+
+    let selectedCommunities = [];
+
+    switch (optionType) {
+      case "allUsers":
+        selectedCommunities = await Community.find({});
+        break;
+
+      case "byState":
+        if (!states || !Array.isArray(states) || states.length === 0) {
+          return res.status(400).json({ message: "States are required for this option." });
+        }
+        selectedCommunities = await Community.aggregate([
+          {
+            $lookup: {
+              from: "users",
+              localField: "userInCommunity",
+              foreignField: "_id",
+              as: "userDetails",
+            },
+          },
+          {
+            $match: {
+              "userDetails.state": { $in: states },
+            },
+          },
+        ]);
+        break;
+
+      case "byCity":
+        if (!cities || !Array.isArray(cities) || cities.length === 0) {
+          return res.status(400).json({ message: "Cities are required for this option." });
+        }
+        selectedCommunities = await Community.find({ city: { $in: cities } });
+        break;
+
+      case "byCommunity":
+        if (!communities || !Array.isArray(communities) || communities.length === 0) {
+          return res.status(400).json({ message: "Communities are required for this option." });
+        }
+        selectedCommunities = await Community.find({ communityName: { $in: communities } });
+        break;
+
+      default:
+        return res.status(400).json({ message: "Invalid option type." });
+    }
+
+    if (selectedCommunities.length === 0) {
+      return res.status(404).json({ message: "No communities found for the selected criteria." });
+    }
+
+    // Add the post ID to the advertisedPosts array of each community
+    const updatedCommunities = await Promise.all(
+      selectedCommunities.map(async (community) => {
+        // If using aggregate, re-fetch as a Mongoose document
+        if (!community.save) {
+          community = await Community.findById(community._id);
+        }
+
+        if (community && !community.advertisedPosts.includes(postId)) {
+          community.advertisedPosts.push(postId);
+          return community.save();
+        }
+        return community;
+      })
+    );
+
+    res.status(200).json({
+      message: "Post added to communities successfully.",
+      communities: updatedCommunities,
+    });
+  } catch (error) {
+    console.error("Error adding post to communities:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };

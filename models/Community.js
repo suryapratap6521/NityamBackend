@@ -17,6 +17,12 @@ posts:[
         ref:"Post",
     }
 ],
+advertisedPosts:[
+    {
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"AdvertisedPost",
+    }
+],
 })
 
 const Community=mongoose.model('Community',communitySchema);

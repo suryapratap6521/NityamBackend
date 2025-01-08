@@ -31,7 +31,14 @@ businessPostCode:{
 },
 businessProfilePicture:{
   type:String,
-}
+},
+advertisedPosts:
+[
+  {
+    type:mongoose.Schema.Types.ObjectId,
+    ref:"AdvertisedPost"
+  }
+]
 },
   { timestamps: true }
 );

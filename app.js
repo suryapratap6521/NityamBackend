@@ -14,6 +14,7 @@ const profileRoutes = require("./routes/Profile");
 const serviceRoutes = require("./routes/Services");
 const accessToken=require('./routes/Get_AccessToken');
 const pageRoutes=require("./routes/Page");
+const advRoutes=require("./routes/advPostRoutes")
 
 const database = require("./config/database");
 const cookieParser = require("cookie-parser");
@@ -74,6 +75,7 @@ app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/services", serviceRoutes);
 app.use("/api/v1/page",pageRoutes);
 app.use("/api/v1/token",accessToken);
+app.use("/api/v1/advpost",advRoutes);
 
 
 // Default Route
