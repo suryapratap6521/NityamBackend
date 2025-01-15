@@ -421,62 +421,74 @@ exports.deletePage = async (req, res) => {
 
 exports.getAllPages = async (req, res) => {
   try {
-    // Fetch all pages and populate their associated advertisedPosts
-    const pages = await Page.find()
-      .populate({
-        path: "advertisedPosts",
-        populate: [
-          {
-            path: "createdBy",
-            select: "firstName lastName email city state communityDetails image",
-            populate: { path: "communityDetails" },
-          },
-          {
-            path: "like",
-            select: "firstName lastName email image", // Populating user details for likes
-          },
-          {
-            path: "comments",
-            populate: [
-              {
-                path: "commentedBy",
-                select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" },
-              },
-              {
-                path: "replies",
-                populate: [
-                  {
-                    path: "repliedBy",
-                    select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" },
-                  },
-                ],
-              },
-            ],
-          },
-          {
-            path: "communities",
-            select: "communityName", // Populating community details
-          },
-        ],
-      })
-      .exec();
+    const userId = req.user.id; // Extract the user ID from the authenticated request
 
-    if (!pages || pages.length === 0) {
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required.",
+      });
+    }
+
+    // Find the user and populate the pages field
+    const user = await User.findById(userId)
+      .select("pages") // Only fetch the pages field
+      .populate({
+        path: "pages",
+        populate: {
+          path: "advertisedPosts",
+          populate: [
+            {
+              path: "createdBy",
+              select: "firstName lastName email city state communityDetails image",
+              populate: { path: "communityDetails" },
+            },
+            {
+              path: "like",
+              select: "firstName lastName email image",
+            },
+            {
+              path: "comments",
+              populate: [
+                {
+                  path: "commentedBy",
+                  select: "firstName lastName email city state communityDetails image",
+                  populate: { path: "communityDetails" },
+                },
+                {
+                  path: "replies",
+                  populate: [
+                    {
+                      path: "repliedBy",
+                      select: "firstName lastName email city state communityDetails image",
+                      populate: { path: "communityDetails" },
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              path: "communities",
+              select: "communityName",
+            },
+          ],
+        },
+      });
+
+    if (!user || !user.pages || user.pages.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "No pages found.",
+        message: "No pages found for the user.",
       });
     }
 
     res.status(200).json({
       success: true,
-      message: "Pages fetched successfully.",
-      data: pages,
+      message: "Pages fetched successfully for the user.",
+      data: user.pages,
     });
   } catch (error) {
-    console.error("Error fetching all pages:", error);
+    console.error("Error fetching user pages:", error);
     res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -484,6 +496,7 @@ exports.getAllPages = async (req, res) => {
     });
   }
 };
+
 
 
 
