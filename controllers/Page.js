@@ -418,3 +418,73 @@ exports.deletePage = async (req, res) => {
   }
 };
 
+
+exports.getAllPages = async (req, res) => {
+  try {
+    // Fetch all pages and populate their associated advertisedPosts
+    const pages = await Page.find()
+      .populate({
+        path: "advertisedPosts",
+        populate: [
+          {
+            path: "createdBy",
+            select: "firstName lastName email city state communityDetails image",
+            populate: { path: "communityDetails" },
+          },
+          {
+            path: "like",
+            select: "firstName lastName email image", // Populating user details for likes
+          },
+          {
+            path: "comments",
+            populate: [
+              {
+                path: "commentedBy",
+                select: "firstName lastName email city state communityDetails image",
+                populate: { path: "communityDetails" },
+              },
+              {
+                path: "replies",
+                populate: [
+                  {
+                    path: "repliedBy",
+                    select: "firstName lastName email city state communityDetails image",
+                    populate: { path: "communityDetails" },
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            path: "communities",
+            select: "communityName", // Populating community details
+          },
+        ],
+      })
+      .exec();
+
+    if (!pages || pages.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No pages found.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Pages fetched successfully.",
+      data: pages,
+    });
+  } catch (error) {
+    console.error("Error fetching all pages:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
