@@ -435,3 +435,55 @@ exports.likeReply = async (req, res) => {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
+
+
+exports.addNestedReply = async (req, res) => {
+  try {
+    const { postId, commentId, replyId, text } = req.body;
+    const userId = req.user.id;
+
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+
+    const comment = post.comments.id(commentId);
+
+    if (!comment) {
+      return res.status(404).json({ success: false, message: "Comment not found" });
+    }
+
+    let targetReply = comment;
+
+    if (replyId) {
+      const findReply = (replies, id) => {
+        for (let reply of replies) {
+          if (reply._id.equals(id)) return reply;
+          const nestedReply = findReply(reply.replies, id);
+          if (nestedReply) return nestedReply;
+        }
+        return null;
+      };
+
+      targetReply = findReply(comment.replies, replyId);
+
+      if (!targetReply) {
+        return res.status(404).json({ success: false, message: "Reply not found" });
+      }
+    }
+
+    const newReply = {
+      repliedBy: userId,
+      text,
+    };
+
+    targetReply.replies.push(newReply);
+    await post.save();
+
+    return res.status(200).json({ success: true, message: "Reply added successfully", post });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};

@@ -308,27 +308,46 @@ exports.getCommunitiesByStates = async (req, res) => {
   };
 
   // Get communities by cities
-exports.getCommunitiesByCities = async (req, res) => {
+  exports.getCommunitiesByCities = async (req, res) => {
     try {
       const { cities } = req.body;
   
+      // Validate input
       if (!cities || !Array.isArray(cities) || cities.length === 0) {
         return res.status(400).json({ message: "Cities are required and should be an array." });
       }
   
-      // Fetch communities based on cities
-      const communities = await Community.find({ city: { $in: cities } });
+      // Perform aggregation to find communities based on users' cities
+      const communities = await Community.aggregate([
+        {
+          $lookup: {
+            from: "users", // Name of the users collection
+            localField: "userInCommunity", // Field in Community referencing user IDs
+            foreignField: "_id", // Field in User corresponding to IDs
+            as: "userDetails", // Alias for joined user data
+          },
+        },
+        {
+          $match: {
+            "userDetails.city": { $in: cities }, // Match cities in userDetails
+          },
+        },
+      ]);
   
       if (communities.length === 0) {
         return res.status(404).json({ message: "No communities found for the provided cities." });
       }
   
-      res.status(200).json({ message: "Communities fetched successfully.", communities });
+      res.status(200).json({
+        message: "Communities fetched successfully.",
+        communities,
+      });
     } catch (error) {
       console.error("Error fetching communities by cities:", error);
-      res.status(500).json({ message: "Internal server error." });
+      res.status(500).json({ message: "Internal server error.", error: error.message });
     }
   };
+  
 
 exports.likeCommentOrReply = async (req, res) => {
     try {

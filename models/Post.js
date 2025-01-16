@@ -1,43 +1,41 @@
 const mongoose = require('mongoose');
 
+const replySchema = new mongoose.Schema({
+  repliedBy: {
+    type: mongoose.Types.ObjectId,
+    ref: "User",
+  },
+  text: {
+    type: String,
+  },
+  repliedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  likes: [{
+    type: mongoose.Types.ObjectId,
+    ref: 'User',
+  }],
+  replies: [this], // Recursive structure for nested replies
+});
+
 const commentSchema = new mongoose.Schema({
-  
   commentedBy: {
     type: mongoose.Types.ObjectId,
     ref: "User",
   },
   text: {
     type: String,
-    // required: true,
   },
   commentedAt: {
     type: Date,
-    default: new Date(),
-    required: true,
+    default: Date.now,
   },
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   }],
-  replies: [{
-    repliedBy: {
-      type: mongoose.Types.ObjectId,
-      ref: "User",
-    },
-    text: {
-      type: String,
-      // required: true,
-    },
-    repliedAt: {
-      type: Date,
-      default: new Date(),
-      required: true,
-    },
-    likes: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    }]
-  }]
+  replies: [replySchema], // Nested replies
 });
 
 const pollOptionSchema = new mongoose.Schema({
@@ -48,17 +46,14 @@ const pollOptionSchema = new mongoose.Schema({
   votes: [{
     type: mongoose.Types.ObjectId,
     ref: "User",
-  }]
+  }],
 });
 
-// Post Schema
 const postSchema = new mongoose.Schema({
   postType: {
-    type: String,  // 'post', 'event', or 'poll'
+    type: String,
     required: true,
   },
-  
-  // Common Fields
   postByUser: {
     type: mongoose.Types.ObjectId,
     ref: 'User',
@@ -73,52 +68,23 @@ const postSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
-  }, eventType: {
-    type: String,
   },
-  eventName: {
-    type: String,
-  },
-  startDate: {
-    type: Date,
-  },
-  endDate: {
-    type: Date,
-  },
-  location: {
-    type: String,
-  },
-  hostedBy: {
-    type: String,
-  },
-  venue: {
-    type: String,
-  },
-
-  // Poll-specific Fields
   pollOptions: {
     type: [pollOptionSchema],
     validate: {
       validator: function (v) {
-        // Only validate poll options if postType is 'poll'
         if (this.postType === 'poll') {
-          return v.length >= 2 && v.length <= 4; // Min 2 options, Max 4 options
+          return v.length >= 2 && v.length <= 4;
         }
-        // Return true if postType is not 'poll' (skip validation)
         return true;
       },
       message: 'A poll must have between 2 and 4 options.',
     },
   },
   like: [{
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
   }],
-  likes: [String],
-  checkLike: {
-    type: Boolean,
-    default: false,
-  },
   comments: [commentSchema],
 });
 
