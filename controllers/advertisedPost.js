@@ -425,4 +425,14 @@ exports.addNestedReply = async (req, res) => {
     }
   };
   
+ exports.getCommunities= async (req, res) => {
+    try {
+      // Fetch only the "name" field from the communities
+      const communities = await Community.find({}, 'communityName'); // Second argument specifies the fields to include
+      res.status(200).json(communities); // Return only community names
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Unable to fetch community names' });
+    }
+  };
   

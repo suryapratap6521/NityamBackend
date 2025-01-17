@@ -1,5 +1,5 @@
 const express = require("express");
-const { createAdvertisedPost,likeAdvertisedPost,replyToComment,addComment,getAdvertisedPosts,getCommunitiesByCities,getCommunitiesByStates,likeCommentOrReply,addNestedReply} = require("../controllers/advertisedPost");
+const { createAdvertisedPost,likeAdvertisedPost,replyToComment,addComment,getAdvertisedPosts,getCommunitiesByCities,getCommunitiesByStates,likeCommentOrReply,addNestedReply,getCommunities} = require("../controllers/advertisedPost");
 const {auth}=require("../middlewares/auth");
 const router = express.Router();
 
@@ -12,6 +12,7 @@ router.post("/getcommunitybystate",auth,getCommunitiesByStates);
 router.post("/getcommunitybycity",auth,getCommunitiesByCities);
 router.post("/likeonreplycomment",auth,likeCommentOrReply);
 router.post("/addnestedreply",auth,addNestedReply);
+router.get("/getcommunities",auth,getCommunities);
 
 
 
