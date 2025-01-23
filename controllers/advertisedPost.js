@@ -1,7 +1,15 @@
 const AdvertisedPost = require("../models/AdvertisedPost");
 const Community = require("../models/Community");
 const Page = require("../models/Page");
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY,
+  key_secret: process.env.RAZORPAY_SECRET,
+});
+
 
 // Create Advertised Post
 exports.createAdvertisedPost = async (req, res) => {
@@ -17,6 +25,7 @@ exports.createAdvertisedPost = async (req, res) => {
         communities,
         pageId,
         buttonLabel,
+        price
       } = req.body;
   
       // Validate timeSlot
@@ -122,6 +131,23 @@ exports.createAdvertisedPost = async (req, res) => {
       if (selectedCommunities.length === 0) {
         return res.status(404).json({ message: "No communities found for the selected criteria." });
       }
+
+
+          // Create Razorpay order
+    const paymentCapture = 1;
+    const currency = "INR";
+    const options = {
+      amount: price * 100, // Amount in paise
+      currency,
+      receipt: `receipt_${Date.now()}`,
+      payment_capture: paymentCapture,
+    };
+
+    const order = await razorpay.orders.create(options);
+
+
+
+
       // Create the Advertised Post
       const newPost = new AdvertisedPost({
         title,
@@ -169,12 +195,62 @@ exports.createAdvertisedPost = async (req, res) => {
       );
       
   
-      res.status(201).json({ success: true, message: "Advertised post created successfully.", post: populatedPost });
+      res.status(201).json({ 
+        success: true,
+        message: "Advertised post created successfully.",
+        post: populatedPost,
+        orderId: order.id,
+        currency: order.currency,
+        amount: order.amount,
+         });
     } catch (error) {
       res.status(500).json({ success: false, message: "Error creating advertised post.", error: error.message });
     }
   };
   
+
+
+  exports.verifyPayment = async (req, res) => {
+    try {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, postData } = req.body;
+  
+      const generatedSignature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest("hex");
+  
+      if (generatedSignature !== razorpay_signature) {
+        return res.status(400).json({ success: false, message: "Payment verification failed." });
+      }
+  
+      // Create the advertised post after successful payment
+      const newPost = new AdvertisedPost({
+        title: postData.title,
+        pageId: postData.pageId,
+        timeSlot: postData.timeSlot,
+        dateSlot: postData.dateSlot,
+        ageGroup: postData.ageGroup,
+        communities: postData.communities,
+        createdBy: req.user.id,
+        buttonLabel: postData.buttonLabel,
+      });
+  
+      if (postData.files && postData.files.length > 0) {
+        const uploadDetails = await uploadFilesToCloudinary(postData.files, process.env.FOLDER_NAME);
+        newPost.imagesArray = uploadDetails.map((file) => file.secure_url);
+      }
+  
+      await newPost.save();
+  
+      res.status(201).json({
+        success: true,
+        message: "Payment successful, advertised post created.",
+        post: newPost,
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Error verifying payment.", error: error.message });
+    }
+  };
    
 
 // Get Advertised Posts
