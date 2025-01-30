@@ -204,7 +204,7 @@ exports.createAdvertisedPost = async (req, res) => {
         amount: order.amount,
          });
     } catch (error) {
-      res.status(500).json({ success: false, message: "Error creating advertised post.", error: error.message });
+      res.status(500).json({ success: false, message: "Error creating advertised post.", error: error });
     }
   };
   
