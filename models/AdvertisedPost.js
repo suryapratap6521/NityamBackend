@@ -55,10 +55,10 @@ const advertisedPostSchema = new mongoose.Schema(
     imagesArray: {
       type: [String], 
     },
-    timeSlot: {
-        start: { type: Date, required: true },
-        end: { type: Date, required: true },
-    },
+    // timeSlot: {
+    //     start: { type: Date, required: true },
+    //     end: { type: Date, required: true },
+    // },
     ageGroup: {
         minAge: { type: Number, required: true },
         maxAge: { type: Number, required: true },

@@ -8,205 +8,162 @@ const { uploadFilesToCloudinary } = require("../utils/imageUploader");
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY,
   key_secret: process.env.RAZORPAY_SECRET,
-});
+}); 
 
 
 // Create Advertised Post
 exports.createAdvertisedPost = async (req, res) => {
-    try {
-      const {
-        title,
-        timeSlot,
-        ageGroup,
-        dateSlot,
-        optionType,
-        states,
-        cities,
-        communities,
-        pageId,
-        buttonLabel,
-        price
-      } = req.body;
-  
-      // Validate timeSlot
-      if (!timeSlot || !timeSlot.start || !timeSlot.end) {
-        return res.status(400).json({ message: "Invalid timeSlot. Both start and end are required." });
-      }
-  
-      const start = new Date(timeSlot.start);
-      const end = new Date(timeSlot.end);
-  
-      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
-        return res.status(400).json({ message: "Invalid date format in timeSlot." });
-      }
-  
+  try {
+      const parseNestedFields = (body) => {
+          return {
+              title: body.title,
+              pageId: body.pageId,
+              price: Number(body.price),
+              ageGroup: {
+                  minAge: Number(body["ageGroup[minAge]"]),
+                  maxAge: Number(body["ageGroup[maxAge]"]),
+              },
+              dateSlot: {
+                  startDate: new Date(body["dateSlot[startDate]"]),
+                  endDate: new Date(body["dateSlot[endDate]"]),
+              },
+              optionType: body.optionType,
+              states: body.states || [],
+              cities: body.cities || [],
+              communities: Array.isArray(body.communities) ? body.communities : [body.communities],
+              buttonLabel: {
+                  type: body["buttonLabel[type]"],
+                  value: body["buttonLabel[value]"],
+              },
+          };
+      };
+      
+      const parsedBody = parseNestedFields(req.body);
+      console.log(parsedBody);
+      console.log(req.files);
+      
       // Validate ageGroup
-      if (!ageGroup || ageGroup.minAge == null || ageGroup.maxAge == null) {
-        return res.status(400).json({ message: "Invalid ageGroup. Both minAge and maxAge are required." });
+      if (!parsedBody.ageGroup || parsedBody.ageGroup.minAge == null || parsedBody.ageGroup.maxAge == null) {
+          return res.status(400).json({ message: "Invalid ageGroup. Both minAge and maxAge are required." });
       }
-  
-      if (ageGroup.minAge < 5 || ageGroup.maxAge > 90 || ageGroup.minAge >= ageGroup.maxAge) {
-        return res.status(400).json({ message: "Invalid ageGroup. Ensure valid age range." });
+      
+      if (parsedBody.ageGroup.minAge < 5 || parsedBody.ageGroup.maxAge > 90 || parsedBody.ageGroup.minAge >= parsedBody.ageGroup.maxAge) {
+          return res.status(400).json({ message: "Invalid ageGroup. Ensure valid age range." });
       }
-  
+      
       // Validate dateSlot
-      if (!dateSlot || !dateSlot.startDate || !dateSlot.endDate) {
-        return res.status(400).json({ message: "Invalid dateSlot. Both startDate and endDate are required." });
+      if (!parsedBody.dateSlot || !parsedBody.dateSlot.startDate || !parsedBody.dateSlot.endDate) {
+          return res.status(400).json({ message: "Invalid dateSlot. Both startDate and endDate are required." });
       }
-  
-      const startDate = new Date(dateSlot.startDate);
-      const endDate = new Date(dateSlot.endDate);
-  
+      
+      const { startDate, endDate } = parsedBody.dateSlot;
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate >= endDate) {
-        return res.status(400).json({ message: "Invalid date format in dateSlot." });
+          return res.status(400).json({ message: "Invalid date format in dateSlot." });
       }
-  
+      
       // Validate buttonLabel
-      if (!buttonLabel || !buttonLabel.type || !buttonLabel.value) {
-        return res.status(400).json({ message: "Invalid buttonLabel. Both type and value are required." });
+      if (!parsedBody.buttonLabel || !parsedBody.buttonLabel.type || !parsedBody.buttonLabel.value) {
+          return res.status(400).json({ message: "Invalid buttonLabel. Both type and value are required." });
       }
-  
+      
       // Validate optionType and fetch communities
       let selectedCommunities = [];
 
-      switch (optionType) {
-        case "allUsers":
-          selectedCommunities = await Community.find({});
-          break;
-  
-        case "byState":
-          if (!states || !Array.isArray(states) || states.length === 0) {
-            return res.status(400).json({ message: "States are required for this option." });
-          }
-          selectedCommunities = await Community.aggregate([
-            {
-              $lookup: {
-                from: "users",
-                localField: "userInCommunity",
-                foreignField: "_id",
-                as: "userDetails",
-              },
-            },
-            {
-              $match: {
-                "userDetails.state": { $in: states },
-              },
-            },
-          ]);
-          break;
-  
+      switch (parsedBody.optionType) {
+          case "allUsers":
+              selectedCommunities = await Community.find({});
+              break;
+          case "byState":
+              if (!parsedBody.states.length) {
+                  return res.status(400).json({ message: "States are required for this option." });
+              }
+              selectedCommunities = await Community.aggregate([
+                  { $lookup: { from: "users", localField: "userInCommunity", foreignField: "_id", as: "userDetails" } },
+                  { $match: { "userDetails.state": { $in: parsedBody.states } } },
+              ]);
+              break;
           case "byCity":
-            if (!cities || !Array.isArray(cities) || cities.length === 0) {
-              return res.status(400).json({ message: "Cities are required for this option." });
-            }
-            selectedCommunities = await Community.aggregate([
-              {
-                $lookup: {
-                  from: "users", // The name of the users collection
-                  localField: "userInCommunity", // Field in Community schema referencing user IDs
-                  foreignField: "_id", // Field in User schema corresponding to the referenced IDs
-                  as: "userDetails", // Alias for the joined user details
-                },
-              },
-              {
-                $match: {
-                  "userDetails.city": { $in: cities }, // Match city in userDetails
-                },
-              },
-            ]);
-            break;
-          
-  
-        case "byCommunity":
-          if (!communities || !Array.isArray(communities) || communities.length === 0) {
-            return res.status(400).json({ message: "Communities are required for this option." });
-          }
-          selectedCommunities = await Community.find({ communityName: { $in: communities } });
-          break;
-  
-        default:
-          return res.status(400).json({ message: "Invalid option type." });
+              if (!parsedBody.cities.length) {
+                  return res.status(400).json({ message: "Cities are required for this option." });
+              }
+              selectedCommunities = await Community.aggregate([
+                  { $lookup: { from: "users", localField: "userInCommunity", foreignField: "_id", as: "userDetails" } },
+                  { $match: { "userDetails.city": { $in: parsedBody.cities } } },
+              ]);
+              break;
+          case "byCommunity":
+              if (!parsedBody.communities.length) {
+                  return res.status(400).json({ message: "Communities are required for this option." });
+              }
+              selectedCommunities = await Community.find({ communityName: { $in: parsedBody.communities } });
+              break;
+          default:
+              return res.status(400).json({ message: "Invalid option type." });
       }
-  
-      if (selectedCommunities.length === 0) {
-        return res.status(404).json({ message: "No communities found for the selected criteria." });
+      
+      if (!selectedCommunities.length) {
+          return res.status(404).json({ message: "No communities found for the selected criteria." });
       }
 
-
-          // Create Razorpay order
-    const paymentCapture = 1;
-    const currency = "INR";
-    const options = {
-      amount: price * 100, // Amount in paise
-      currency,
-      receipt: `receipt_${Date.now()}`,
-      payment_capture: paymentCapture,
-    };
-
-    const order = await razorpay.orders.create(options);
-
-
-
-
+      // Create Razorpay order
+      const options = {
+          amount: parsedBody.price * 100,
+          currency: "INR",
+          receipt: `receipt_${Date.now()}`,
+          payment_capture: 1,
+      };
+      const order = await razorpay.orders.create(options);
+      
       // Create the Advertised Post
       const newPost = new AdvertisedPost({
-        title,
-        pageId,
-        timeSlot: { start, end },
-        dateSlot: { startDate, endDate },
-        ageGroup,
-        communities: selectedCommunities.map((c) => c._id),
-        createdBy: req.user.id,
-        buttonLabel,
+          title: parsedBody.title,
+          pageId: parsedBody.pageId,
+          dateSlot: { startDate, endDate },
+          ageGroup: parsedBody.ageGroup,
+          communities: selectedCommunities.map((c) => c._id),
+          createdBy: req.user.id,
+          buttonLabel: parsedBody.buttonLabel,
       });
-  
+      
       // Handle file uploads
-      const files = req.files ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
-      if (files.length > 0) {
-        const uploadDetails = await uploadFilesToCloudinary(files, process.env.FOLDER_NAME);
-        newPost.imagesArray = uploadDetails.map((file) => file.secure_url);
-      }
-  
-      await newPost.save();
-     
-      console.log(selectedCommunities);
-
-      //updating the page by pushing the post_id in the array
-      await Page.findByIdAndUpdate(pageId, {
-        $push: { advertisedPosts: newPost._id }
-      });
-
-
+      const files = req.files && req.files.imagesArray
+      ? (Array.isArray(req.files.imagesArray) ? req.files.imagesArray : [req.files.imagesArray])
+      : [];
+    
+    if (files.length > 0) {
+      const uploadDetails = await uploadFilesToCloudinary(files, process.env.FOLDER_NAME);
+      newPost.imagesArray = uploadDetails.map((file) => file.secure_url);
+    }
+    
+    await newPost.save();
+    
+      
+      // Update page with post ID
+      await Page.findByIdAndUpdate(parsedBody.pageId, { $push: { advertisedPosts: newPost._id } });
+      
       const populatedPost = await AdvertisedPost.findById(newPost._id).populate("communities");
-
+      
       // Update communities with the new post
       await Promise.all(
-        selectedCommunities.map(async (community) => {
-          try {
-            await Community.updateOne(
-              { _id: community._id },
-              { $addToSet: { advertisedPosts: newPost._id } } // Ensures no duplicates
-            );
-            console.log(`Advertised post ${newPost._id} added to community ${community._id}`);
-          } catch (error) {
-            console.error(`Failed to update community ${community._id}:`, error);
-          }
-        })
+          selectedCommunities.map(async (community) => {
+              await Community.updateOne({ _id: community._id }, { $addToSet: { advertisedPosts: newPost._id } });
+          })
       );
       
-  
       res.status(201).json({ 
-        success: true,
-        message: "Advertised post created successfully.",
-        post: populatedPost,
-        orderId: order.id,
-        currency: order.currency,
-        amount: order.amount,
-         });
-    } catch (error) {
-      res.status(500).json({ success: false, message: "Error creating advertised post.", error: error });
-    }
-  };
+          success: true,
+          message: "Advertised post created successfully.",
+          post: populatedPost,
+          orderId: order.id,
+          currency: order.currency,
+          amount: order.amount,
+      });
+  } catch (error) {
+    console.log(error);
+      res.status(500).json({ success: false, message: "Error creating advertised post.", error });
+  }
+};
+
   
 
 
