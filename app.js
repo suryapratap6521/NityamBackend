@@ -15,7 +15,7 @@ const serviceRoutes = require("./routes/Services");
 const accessToken=require('./routes/Get_AccessToken');
 const pageRoutes=require("./routes/Page");
 const advRoutes=require("./routes/advPostRoutes")
-
+const notificationRoutes=require("./routes/Notification");
 const database = require("./config/database");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
@@ -76,7 +76,7 @@ app.use("/api/v1/services", serviceRoutes);
 app.use("/api/v1/page",pageRoutes);
 app.use("/api/v1/token",accessToken);
 app.use("/api/v1/advpost",advRoutes);
-
+app.use("/api/v1/notifications",notificationRoutes)
 
 // Default Route
 app.get("/", (req, res) => {
@@ -96,6 +96,8 @@ const io = socketIO(server, {
     pingTimeout: 60000,
     cors: {
         origin: "http://localhost:3000",
+        methods: ["GET", "POST"],
+        credentials: true
     }
 });
 global.io = io; // Make `io` globally accessible
@@ -103,12 +105,16 @@ global.io = io; // Make `io` globally accessible
 // Socket.io connection event
 io.on("connection", (socket) => {
     console.log("connected to socket.io");
-
+  
     socket.on("setup", (userData) => {
-        console.log("Setting up socket room for user:", userData._id);
-        socket.join(userData._id);
-        socket.emit("connected");
+      console.log("Setting up socket room for user:", userData._id);
+      socket.join(userData._id);
+      socket.emit("connected");
     });
+
+    socket.on("newNotification", (notification) => {
+        socket.to(notification.recipient.toString()).emit("notificationReceived", notification);
+      });
 
     socket.on("join chat", (room) => {
         socket.join(room);
@@ -121,13 +127,14 @@ io.on("connection", (socket) => {
     socket.on("new Message", (newMessageRecieved) => {
         var chat = newMessageRecieved.chat;
 
-        if (!chat.users) return console.log("chat.users not defined");
+        if (!chat.users) return console.log("chat users not defined");
 
         chat.users.forEach((user) => {
             if (user._id == newMessageRecieved.sender._id) return;
             socket.in(user._id).emit("message recieved", newMessageRecieved);
         });
     });
+   
 
     socket.off("setup", () => {
         console.log("USER DISCONNECTED");

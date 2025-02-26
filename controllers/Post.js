@@ -4,7 +4,8 @@ const Post = require("../models/Post");
 const User = require("../models/User");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
 const AdvertisedPost=require("../models/AdvertisedPost");
-// const Notification = require('../models/Notification');
+const Notification = require('../models/Notification');  // Adjust the path if needed
+
 // const NotificationController = require('../controllers/notificationController');
 require("dotenv").config();
 
@@ -73,10 +74,13 @@ require("dotenv").config();
 
 // createPost controller for handling media files in both posts and events
 // controllers/Post.js
+
+console.log(Notification,"-------------asdasdas")
 exports.createPost = async (req, res) => {
   try {
     const { postType, title, location, startDate, endDate, hostedBy, venue, description, pollOptions } = req.body;
     const userId = req.user.id;
+    console.log(req.body);
 
     if (!userId) {
       return res.status(404).json({
@@ -136,6 +140,37 @@ exports.createPost = async (req, res) => {
 
     // console.log("Notification emitted to room:", userDetails.communityDetails);
 
+// Add at top
+
+
+// Inside createPost function after community update:
+const community = await Community.findById(userDetails.communityDetails)
+  .select('userInCommunity')
+  .populate('userInCommunity')
+  .exec();
+
+const members = community.userInCommunity.filter(member => member._id.toString() !== userId.toString());
+
+const notifications = members.map(member => ({
+  recipient: member._id,
+  sender: userId,
+  post: post._id,
+  type: postType,
+  message: `${userDetails.firstName} created a new ${postType}: "${title.substring(0, 30)}..."`
+}));
+
+
+if (notifications.length > 0) {
+  await Notification.insertMany(notifications);
+
+  global.io.to(members.map(m => m._id.toString())).emit("newNotification", {
+    sender: userDetails,
+    post: post,
+    notifications,
+  });
+}
+
+
 
     return res.status(200).json({
       success: true,
@@ -152,7 +187,66 @@ exports.createPost = async (req, res) => {
   }
 };
 
+// Add these endpoints
+exports.voteOnPoll = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { optionIndex } = req.body;
+    const userId = req.user.id;
 
+    const post = await Post.findById(postId);
+    if (!post || post.postType !== 'poll') {
+      return res.status(404).json({ error: 'Poll not found' });
+    }
+
+    // Remove existing votes
+    post.pollOptions.forEach(option => {
+      option.votes = option.votes.filter(vote => vote.toString() !== userId);
+    });
+
+    // Add new vote
+    post.pollOptions[optionIndex].votes.push(userId);
+    await post.save();
+
+    // Populate voter details
+    const populatedPost = await Post.findById(postId).populate({
+      path: 'pollOptions.votes',
+      select: 'firstName lastName image'
+    });
+
+    res.status(200).json({
+      success: true,
+      updatedPoll: populatedPost.pollOptions
+    });
+
+  } catch (error) {
+    console.error('Error voting on poll:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getVoters = async (req, res) => {
+  try {
+    const { postId, optionIndex } = req.params;
+    
+    const post = await Post.findById(postId)
+      .populate({
+        path: `pollOptions.${optionIndex}.votes`,
+        select: 'firstName lastName image'
+      });
+
+    if (!post) return res.status(404).json({ error: 'Poll not found' });
+
+    res.status(200).json({
+      success: true,
+      voters: post.pollOptions[optionIndex].votes
+    });
+
+  } catch (error) {
+    console.error('Error fetching voters:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 
 exports.getAllPosts = async (req, res) => {

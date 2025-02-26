@@ -1,7 +1,7 @@
 const Message = require("../models/Message");
 const User = require("../models/User");
 const Chat = require("../models/Chat");
-
+const Notification=require("../models/Notification");
 exports.sendMessage = async (req, res) => {
     const { user } = req.user;
     const { content, chatId } = req.body;
@@ -36,6 +36,16 @@ exports.sendMessage = async (req, res) => {
         await Chat.findByIdAndUpdate(req.body.chatId, {
             latestMessage: message,
         });
+
+        // const notification = new Notification({
+        //     recipient: message.users.find(u => u.toString() !== req.user._id.toString()),
+        //     sender: req.user._id,
+        //     type: 'chat',
+        //     chat: message._id,
+        //     message: `New message: ${content.substring(0, 30)}...`
+        //   });
+      
+        //   await notification.save();
 
         return res.status(201).json({
             success: true,
