@@ -389,6 +389,34 @@ exports.getCommunityPost = async (req, res) => {
   }
 };
 
+exports.getCommunityEvents = async (req, res) => {
+  try {
+      const userId = req.user.id; // Assuming user ID comes from authentication middleware
+
+      // Find communities where the user is a member
+      const communities = await Community.find({ members: userId }).select("_id");
+
+      if (!communities.length) {
+          return res.status(404).json({ message: "User is not part of any community." });
+      }
+
+      // Extract community IDs
+      const communityIds = communities.map(community => community._id);
+
+      // Find posts with postType "events" in those communities
+      const events = await Post.find({
+          postType: "events",
+          community: { $in: communityIds }
+      }).populate("community", "name"); // Populate community name if needed
+
+      res.status(200).json(events);
+  } catch (error) {
+      console.error("Error fetching community events:", error);
+      res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+
 
 
 //////////////////////////////////////////////////////////////////////////////
