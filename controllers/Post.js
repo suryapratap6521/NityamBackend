@@ -392,7 +392,7 @@ exports.getCommunityPost = async (req, res) => {
 exports.getCommunityEvents = async (req, res) => {
   try {
       const userId = req.user.id; // Get user ID from authentication middleware
-
+      
       // Find communities where the user is a member
       const communities = await Community.find({ userInCommunity: userId });
 
@@ -402,7 +402,7 @@ exports.getCommunityEvents = async (req, res) => {
 
       // Extract all post IDs from the user's communities
       const postIds = communities.flatMap(community => community.posts);
-
+      
       if (!postIds.length) {
           return res.status(404).json({ message: "No posts found in user's communities." });
       }
@@ -410,7 +410,7 @@ exports.getCommunityEvents = async (req, res) => {
       // Find posts with postType "events"
       const events = await Post.find({
           _id: { $in: postIds },  // Get posts by extracted post IDs
-          postType: "events"
+          postType: "event"
       }).populate("postByUser", "name") // Populate user name if needed
 
       if (!events.length) {
