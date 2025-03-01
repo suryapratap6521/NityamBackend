@@ -391,23 +391,31 @@ exports.getCommunityPost = async (req, res) => {
 
 exports.getCommunityEvents = async (req, res) => {
   try {
-      const userId = req.user.id; // Assuming user ID comes from authentication middleware
+      const userId = req.user.id; // Get user ID from authentication middleware
 
       // Find communities where the user is a member
-      const communities = await Community.find({ members: userId }).select("_id");
+      const communities = await Community.find({ userInCommunity: userId });
 
       if (!communities.length) {
           return res.status(404).json({ message: "User is not part of any community." });
       }
 
-      // Extract community IDs
-      const communityIds = communities.map(community => community._id);
+      // Extract all post IDs from the user's communities
+      const postIds = communities.flatMap(community => community.posts);
 
-      // Find posts with postType "events" in those communities
+      if (!postIds.length) {
+          return res.status(404).json({ message: "No posts found in user's communities." });
+      }
+
+      // Find posts with postType "events"
       const events = await Post.find({
-          postType: "events",
-          community: { $in: communityIds }
-      }).populate("community", "name"); // Populate community name if needed
+          _id: { $in: postIds },  // Get posts by extracted post IDs
+          postType: "events"
+      }).populate("postByUser", "name") // Populate user name if needed
+
+      if (!events.length) {
+          return res.status(404).json({ message: "No events found in user's communities." });
+      }
 
       res.status(200).json(events);
   } catch (error) {
@@ -415,6 +423,8 @@ exports.getCommunityEvents = async (req, res) => {
       res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+
 
 
 

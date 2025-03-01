@@ -37,10 +37,20 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(
     cors({
-        origin: "*",
+        origin: "http://localhost:3000",
+        methods: ["GET", "POST", "PUT", "DELETE"],
         credentials: true,
     })
 );
+
+
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "http://localhost:3000");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Credentials", "true");
+    next();
+})
 
 app.use(
     fileUpload({
@@ -93,13 +103,13 @@ server.listen(PORT, () => {
 
 // Set up Socket.io
 const io = socketIO(server, {
-    pingTimeout: 60000,
     cors: {
         origin: "http://localhost:3000",
         methods: ["GET", "POST"],
         credentials: true
     }
 });
+
 global.io = io; // Make `io` globally accessible
 
 // Socket.io connection event
@@ -136,8 +146,7 @@ io.on("connection", (socket) => {
     });
    
 
-    socket.off("setup", () => {
-        console.log("USER DISCONNECTED");
-        socket.leave(userData._id);
+    socket.on("disconnect", () => {
+        console.log("User disconnected from Socket.IO");
     });
 });
