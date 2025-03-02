@@ -97,7 +97,7 @@ app.get("/", (req, res) => {
 });
 
 // Activate server
-server.listen(PORT, () => {
+server.listen(8080, () => {
     console.log(`Your app is running at ${PORT}`);
 });
 
