@@ -110,44 +110,31 @@ exports.updateProfile = async (req, res) => {
     }
   }
   
- // controllers/profile.js
-exports.updateDisplayPicture = async (req, res) => {
-  try {
-    const displayPicture = req.files.displayPicture;
-    const userId = req.user.id;
-
-    // Validate file exists
-    if (!displayPicture) {
-      return res.status(400).json({
+  exports.updateDisplayPicture = async (req, res) => {
+    try {
+      const displayPicture = req.files.displayPicture
+      const userId = req.user.id
+      const image = await uploadFilesToCloudinary(
+        displayPicture,
+        process.env.FOLDER_NAME,
+      
+      )
+      
+      const updatedProfile = await User.findByIdAndUpdate(
+        { _id: userId },
+        { image: image[0].secure_url },
+        { new: true }
+      )
+      res.send({
+        success: true,
+        message: `Image Updated successfully`,
+        data: updatedProfile,
+      })
+    } catch (error) {
+      return res.status(500).json({
         success: false,
-        message: "No image file provided",
-      });
+        message: error.message,
+      })
     }
-
-    // Upload to Cloudinary
-    const image = await uploadFilesToCloudinary(
-      displayPicture,
-      process.env.FOLDER_NAME
-    );
-
-    // Update user with new image URL
-    const updatedUser = await User.findByIdAndUpdate(
-      { _id: userId },
-      { image: image.secure_url },
-      { new: true } // Return updated document
-    ).populate("additionalDetails");
-
-    res.status(200).json({
-      success: true,
-      message: "Image updated successfully",
-      data: updatedUser,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
   }
-};
   
