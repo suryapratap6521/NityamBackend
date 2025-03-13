@@ -12,7 +12,7 @@ const {
   searchUsers,
   googleLogin,
   googleCallback,
-  googleDetails,
+  // googleDetails,
   profileDetails,
   communityAddress,
   community,
@@ -71,5 +71,5 @@ router.get("/search",auth,searchUsers);
 
 router.get('/google', googleLogin);
 router.get('/google/callback',googleCallback);
-router.post('/googledetails',auth,googleDetails);
+// router.post('/googledetails',auth,googleDetails);
 module.exports = router

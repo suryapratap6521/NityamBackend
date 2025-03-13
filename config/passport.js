@@ -6,22 +6,29 @@ require('dotenv').config();
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "http://localhost:8080/api/v1/auth/google/callback"
+    callbackURL: "https://nityambackend.onrender.com/api/v1/auth/google/callback"
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
-      // Find or create user
-      console.log(accessToken,"---->accesss");
-      console.log(refreshToken,"-------->refresh");
-      console.log(profile,"------profile");
-      console.log(done,"-------->done");
-      let user = await User.findOne({ googleId: profile.id });
-      if (!user) {
+      const email = profile.emails[0].value;
+      // Check if a user with this email already exists
+      let user = await User.findOne({ email });
+      
+      if (user) {
+        // If user exists, update googleId if not already set
+        if (!user.googleId) {
+          user.googleId = profile.id;
+          // Optionally update image if needed:
+          user.image = profile.photos[0].value;
+          await user.save();
+        }
+      } else {
+        // If no user exists, create a new one
         user = await User.create({
           googleId: profile.id,
           firstName: profile.name.givenName,
           lastName: profile.name.familyName,
-          email: profile.emails[0].value,
+          email: email,
           image: profile.photos[0].value,
           accountType: "People",
         });

@@ -292,43 +292,28 @@ exports.profileDetails = async (req, res) => {
 			});
 		}
 
-		
-
-		// Find the user by ID
-		const user = await User.findById(userId);
-		if (!user) {
+		const userDetails = await User.findByIdAndUpdate(
+			userId,
+			{
+			  gender:gender,
+			  dateOfBirth: new Date(dateOfBirth),
+			},
+			{ new: true } // This returns the updated document
+		  ).populate("communityDetails").populate("additionalDetails");
+	  
+		  // Check if the user was found and updated
+		  if (!userDetails) {
 			return res.status(404).json({
-				success: false,
-				message: "User not found.",
+			  success: false,
+			  message: "User not found.",
 			});
-		}
-
-		// Get profile associated with the user
-		const profileId = user.additionalDetails;
-		const profile = await Profile.findById(profileId);
-
-		if (!profile) {
-			return res.status(404).json({
-				success: false,
-				message: "Profile not found.",
-			});
-		}
-
-		// Update the profile details
-		profile.gender = gender;
-		profile.dateOfBirth = new Date(dateOfBirth); // Convert to Date object for consistency
-
-		// Save updated profile
-		await profile.save();
+		  }
 
 		// Send success response
 		return res.status(200).json({
 			success: true,
 			message: "Profile updated successfully.",
-			profile: {
-				gender: profile.gender,
-				dateOfBirth: profile.dateOfBirth,
-			},
+			userDetails,
 		});
 	} catch (error) {
 		console.error("Error updating profile:", error);
@@ -361,7 +346,7 @@ exports.communityAddress = async (req, res) => {
 	  }
   
 	  // Update user's community address
-	  const user = await User.findByIdAndUpdate(
+	  const userDetails = await User.findByIdAndUpdate(
 		userId,
 		{
 		  state: state,
@@ -371,7 +356,7 @@ exports.communityAddress = async (req, res) => {
 		{ new: true } // Returns the updated document
 	  );
   
-	  if (!user) {
+	  if (!userDetails) {
 		return res.status(404).json({
 		  success: false,
 		  message: "User not found.",
@@ -382,7 +367,7 @@ exports.communityAddress = async (req, res) => {
 	  return res.status(200).json({
 		success: true,
 		message: "Community address updated successfully.",
-		user, // Return updated user details
+		userDetails, // Return updated user details
 	  });
 	} catch (error) {
 	  console.error("Error updating community address:", error);
@@ -490,7 +475,7 @@ exports.communityAddress = async (req, res) => {
 	  return res.status(200).json({
 		success: true,
 		message: "Verification details updated successfully.",
-		user: userDetails,
+		userDetails,
 	  });
 	} catch (error) {
 	  console.error("Verification Error:", error);
@@ -620,113 +605,64 @@ exports.login = async (req, res) => {
 exports.googleLogin = passport.authenticate('google', {
 	scope: ['profile', 'email'],
   });
-
-
-
-// Google OAuth2 callback route
-exports.googleCallback = (req, res) => {
+  
+  // Google OAuth2 callback route
+  exports.googleCallback = (req, res, next) => {
 	passport.authenticate('google', { failureRedirect: '/login' }, async (err, user, info) => {
-	  if (err) {
-		return res.status(500).json({ message: 'Internal Server Error', error: err });
+	  try {
+		if (err) {
+		  return res.status(500).json({ message: 'Internal Server Error', error: err });
+		}
+		if (!user) {
+		  return res.status(400).json({ message: 'User not found' });
+		}
+		if (!user.googleId) {
+		  return res.status(400).json({ message: 'Google ID is required for Google login' });
+		}
+		
+		// Generate JWT token
+		const token = jwt.sign(
+		  { email: user.email, id: user._id, accountType: user.accountType },
+		  process.env.JWT_SECRET,
+		  { expiresIn: '24h' }
+		);
+		
+		user.token = token;
+		await user.save();
+		
+		// Re-fetch the updated user (if needed)
+		const updatedUser = await User.findById(user._id);
+		
+		// Set cookies (stringify the user)
+		res.cookie('user', JSON.stringify(updatedUser), {
+		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+		  httpOnly: false,
+		});
+		res.cookie('token', token, {
+		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+		  httpOnly: false,
+		});
+		
+		// Determine if onboarding is complete.
+		// For example, if communityDetails exists or the other onboarding fields are set.
+		const hasOnboarding =
+		  (updatedUser.communityDetails && 
+			(typeof updatedUser.communityDetails === "string" 
+			   ? updatedUser.communityDetails.trim() !== "" 
+			   : true)) ||
+		  (updatedUser.city && updatedUser.state && updatedUser.postalCost && updatedUser.community);
+		
+		if (hasOnboarding) {
+		  return res.redirect('http://localhost:3000/dashboard');
+		} else {
+		  return res.redirect('http://localhost:3000/profiledetails');
+		}
+	  } catch (error) {
+		console.error("Google Callback Error:", error);
+		return res.status(500).json({ message: 'Internal Server Error', error });
 	  }
-	  if (!user) {
-		return res.status(400).json({ message: 'User not found' });
-	  }
-  
-	  if (!user.googleId) {
-		return res.status(400).json({ message: 'Google ID is required for Google login' });
-	  }
-  
-	  // Generate JWT token
-	  const token = jwt.sign(
-		{ email: user.email, id: user._id, accountType: user.accountType },
-		process.env.JWT_SECRET,
-		{ expiresIn: "24h" }
-	  );
-  
-	  user.token = token;
-	  await user.save();
-	  res.cookie("user", user, {
-		expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		httpOnly: false,
-	  });
-	  res.cookie("token", token, {
-		expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		httpOnly: false,
-	  });
-  
-	  if (user.communityDetails) {
-		res.redirect(`http://localhost:3000/dashboard`);
-	  } else {
-		res.redirect(`http://localhost:3000/details`);
-	  }
-	})(req, res);
+	})(req, res, next);
   };
-  
-
-  
-
-exports.googleDetails = async (req, res) => {
-  const { city, state, postalCost, community, phoneNumber } = req.body;
-
-  try {
-    const id = req.user.id;
-
-    if (!id) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized access",
-      });
-    }
-
-    let communityDetails = await Community.findOne({ communityName: community });
-
-    if (!communityDetails) {
-      communityDetails = await Community.create({ communityName: community });
-    }
-
-    
-
-    const profileDetails = await Profile.create({
-      gender: null,
-      dateOfBirth: null,
-      about: null,
-      phoneNumber: phoneNumber,
-    });
-
-
-    const user = await User.findByIdAndUpdate(id, {
-      $set: {
-        state: state,
-        city: city,
-        community: community,
-        phoneNumber: phoneNumber,
-        postalCost: postalCost,
-        additionalDetails: profileDetails._id,
-        communityDetails: communityDetails._id // Corrected to communityDetails
-      }
-    }, { new: true });
-
-    await Community.findByIdAndUpdate(
-      communityDetails._id,
-      { $addToSet: { userInCommunity: id } },
-      { new: true }
-    );
-
-    return res.status(200).json({
-      success: true,
-      user,
-      message: "User registered successfully",
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "User cannot be registered. Please try again.",
-    });
-  }
-};
-
 
 
 
@@ -783,7 +719,7 @@ exports.googleDetails = async (req, res) => {
 
 exports.sendotp = async (req, res) => {
     try {
-        const { phoneNumber } = req.body;
+        const { phoneNumber,email } = req.body;
 		console.log(phoneNumber, "---->");
         
         // Check if the user already exists with this phone number
@@ -795,6 +731,15 @@ exports.sendotp = async (req, res) => {
                 message: "User already registered with this phone number.",
             });
         }
+		const existingUserWithEmail = await User.findOne({email});
+		console.log(existingUserWithEmail,"----->ppopop");
+        if (existingUserWithEmail) {
+            return res.status(400).json({
+                success: false,
+                message: "User already registered with this Email Id.",
+            });
+        }
+		
 
         // Generate a 6-digit OTP
 		let otp = otpGenerator.generate(6, {
@@ -805,7 +750,7 @@ exports.sendotp = async (req, res) => {
 		console.log(otp, "--->>>>>>");
         
         // Save OTP to the database
-        const otpPayload = { phoneNumber, otp };
+        const otpPayload = { phoneNumber,email, otp };
         const otpp=await OTP.create(otpPayload);
 
         // Send OTP via SMS using Twilio
@@ -818,7 +763,7 @@ exports.sendotp = async (req, res) => {
         res.status(200).json({
             success: true,
 			otpp,
-            message: "OTP sent successfully.",
+            message: "OTP sent successfully on your Phone Number and Email Id.",
         });
     } catch (error) {
         console.error("Error sending OTP:", error);

@@ -475,7 +475,7 @@ exports.getAllPages = async (req, res) => {
         },
       });
 
-    if (!user || !user.pages || user.pages.length === 0) {
+    if (!user || !user.pages) {
       return res.status(404).json({
         success: false,
         message: "No pages found for the user.",
