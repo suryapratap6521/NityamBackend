@@ -12,10 +12,7 @@ const profileSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  contactNumber: {
-    type: Number,
-    trim: true,
-  },
+ 
 });
 
 // Export the Profile model
