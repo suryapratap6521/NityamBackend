@@ -1,5 +1,5 @@
 const cloudinary = require("cloudinary").v2; //! Cloudinary is being required
-
+const streamifier = require('streamifier');
 exports.cloudinaryConnect = () => {
 	try {
 		cloudinary.config({

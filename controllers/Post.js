@@ -78,7 +78,7 @@ require("dotenv").config();
 console.log(Notification,"-------------asdasdas")
 exports.createPost = async (req, res) => {
   try {
-    const { postType, title, location, startDate, endDate, hostedBy, venue, description, pollOptions } = req.body;
+    const { postType, title, location, startDate, endDate, hostedBy,description, pollOptions } = req.body;
     const userId = req.user.id;
     console.log(req.body);
 
@@ -97,10 +97,10 @@ exports.createPost = async (req, res) => {
       }
       postData.pollOptions = pollOptions.map(option => ({ option }));
     } else if (postType === 'event') {
-      if (!location || !startDate || !endDate || !hostedBy || !venue) {
+      if (!location || !startDate || !endDate || !hostedBy) {
         return res.status(400).json({ error: 'Event details are required.' });
       }
-      postData = { ...postData, location, startDate, endDate, hostedBy, venue, description };
+      postData = { ...postData, location, startDate, endDate, hostedBy, description };
       const eventFiles = req.files ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
       if (eventFiles.length > 0) {
         const uploadDetails = await uploadFilesToCloudinary(eventFiles, process.env.FOLDER_NAME);
@@ -269,12 +269,10 @@ exports.getAllPosts = async (req, res) => {
     });
   }
 };
-
 exports.getCommunityPost = async (req, res) => {
   try {
     // Get the user ID from the request
     const userId = req.user.id;
-    
 
     // Find user details by ID
     const userDetails = await User.findById(userId);
@@ -289,90 +287,78 @@ exports.getCommunityPost = async (req, res) => {
     const communityId = userDetails.communityDetails;
 
     const communityDetails = await Community.findById(communityId)
-    .populate({
-      path: "posts",
-      populate: [
-        {
-          path: "postByUser",
-          select: "firstName lastName email city state community image",
-          populate: { path: "communityDetails" }
-        },
-        {
-          path: "like"
-        },
-        {
-          path: "comments",
-          populate: [
-            {
-              path: "commentedBy",
-              select: "firstName lastName email city state communityDetails image",
-              populate: { path: "communityDetails" }
-            },
-            {
-              path: "replies",
-              populate: [
-                {
-                  path: "repliedBy",
-                  select: "firstName lastName email city state communityDetails image",
-                  populate: { path: "communityDetails" }
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    })
-    .populate({
-      path: "advertisedPosts",
-      populate: [
-        {
-          path: "createdBy",
-          select: "firstName lastName email city state communityDetails image",
-          populate: { path: "communityDetails" }
-        },
-        {
-          path: "like",
-          select: "firstName lastName email image" // Assuming you want basic user details for likes
-        },
-        {
-          path: "comments",
-          populate: [
-            {
-              path: "commentedBy",
-              select: "firstName lastName email city state communityDetails image",
-              populate: { path: "communityDetails" }
-            },
-            {
-              path: "replies",
-              populate: [
-                {
-                  path: "repliedBy",
-                  select: "firstName lastName email city state communityDetails image",
-                  populate: { path: "communityDetails" }
-                }
-              ]
-            }
-          ]
-        },
-        {
-          path: "communities",
-          select: "communityName" // Populating community details if required
-        },
-        {
-          path: "pageId",
-          select: "name description image", // Replace with fields available in the `Page` schema
-        }
-      ]
-    })
-    .exec();
-  
-  const communityPost = communityDetails.posts;
-  const communityAdvertisedPosts = communityDetails.advertisedPosts;
-  
+      .populate({
+        path: "posts",
+        options: { sort: { createdAt: -1 } }, // Sort by latest first
+        populate: [
+          {
+            path: "postByUser",
+            select: "firstName lastName email city state community image",
+            populate: { path: "communityDetails" }
+          },
+          { path: "like" },
+          {
+            path: "comments",
+            populate: [
+              {
+                path: "commentedBy",
+                select: "firstName lastName email city state communityDetails image",
+                populate: { path: "communityDetails" }
+              },
+              {
+                path: "replies",
+                populate: [
+                  {
+                    path: "repliedBy",
+                    select: "firstName lastName email city state communityDetails image",
+                    populate: { path: "communityDetails" }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      })
+      .populate({
+        path: "advertisedPosts",
+        options: { sort: { createdAt: -1 } }, // Sort by latest first
+        populate: [
+          {
+            path: "createdBy",
+            select: "firstName lastName email city state communityDetails image",
+            populate: { path: "communityDetails" }
+          },
+          { path: "like", select: "firstName lastName email image" },
+          {
+            path: "comments",
+            populate: [
+              {
+                path: "commentedBy",
+                select: "firstName lastName email city state communityDetails image",
+                populate: { path: "communityDetails" }
+              },
+              {
+                path: "replies",
+                populate: [
+                  {
+                    path: "repliedBy",
+                    select: "firstName lastName email city state communityDetails image",
+                    populate: { path: "communityDetails" }
+                  }
+                ]
+              }
+            ]
+          },
+          { path: "communities", select: "communityName" },
+          { path: "pageId", select: "name description image" }
+        ]
+      })
+      .exec();
 
-   
+    // Extract sorted posts and advertised posts
+    const communityPost = communityDetails.posts;
+    const communityAdvertisedPosts = communityDetails.advertisedPosts;
 
-    // Send response with community posts
     return res.status(200).json({
       success: true,
       message: "Successfully retrieved all community posts",
@@ -380,7 +366,6 @@ exports.getCommunityPost = async (req, res) => {
       communityAdvertisedPosts,
     });
   } catch (error) {
-    // Handle errors
     console.error(error);
     return res.status(500).json({
       success: false,
@@ -403,19 +388,22 @@ exports.getCommunityEvents = async (req, res) => {
       // Extract all post IDs from the user's communities
       const postIds = communities.flatMap(community => community.posts);
       
-      if (!postIds.length) {
-          return res.status(404).json({ message: "No posts found in user's communities." });
-      }
+      // if (!postIds.length) {
+      //     return res.status(404).json({ message: "No posts found in user's communities." });
+      // }
 
       // Find posts with postType "events"
       const events = await Post.find({
-          _id: { $in: postIds },  // Get posts by extracted post IDs
-          postType: "event"
-      }).populate("postByUser", "name") // Populate user name if needed
+        _id: { $in: postIds }, // Get posts by extracted post IDs
+        postType: "event"
+      })
+        .populate("postByUser", "name")
+        .sort({ createdAt: -1 }); // Corrected syntax for sorting
+       // Populate user name if needed
 
-      if (!events.length) {
-          return res.status(404).json({ message: "No events found in user's communities." });
-      }
+      // if (!events.length) {
+      //     return res.status(404).json({ message: "No events found in user's communities." });
+      // }
 
       res.status(200).json(events);
   } catch (error) {

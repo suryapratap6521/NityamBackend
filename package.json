@@ -33,6 +33,7 @@
     "path": "^0.12.7",
     "razorpay": "^2.9.5",
     "socket.io": "^4.8.0",
+    "streamifier": "^0.1.1",
     "twilio": "^5.3.1",
     "validator": "^13.11.0"
   }

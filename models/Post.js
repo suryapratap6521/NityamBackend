@@ -94,9 +94,7 @@ const postSchema = new mongoose.Schema({
   hostedBy: {
     type: String,
   },
-  venue: {
-    type: String,
-  },
+ 
 
   // Poll-specific Fields
   pollOptions: {
