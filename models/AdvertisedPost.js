@@ -72,6 +72,7 @@ const advertisedPostSchema = new mongoose.Schema(
         endDate: { type: Date, required: true },
     },
     communities: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Community' }],
+    premium: { type: Boolean, default: false },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User", 

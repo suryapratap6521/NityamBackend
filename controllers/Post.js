@@ -568,3 +568,27 @@ exports.createAdv = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+
+//getting the particualar event 
+
+// controllers/Post.js
+exports.getEventById = async (req, res) => {
+  try {
+    const { id } = req.params; // using route parameter
+    // Ensure that the post type is "event"
+    const event = await Post.findOne({ _id: id, postType: 'event' })
+      .populate('postByUser', 'firstName lastName email')
+      .exec();
+
+    if (!event) {
+      console.log("Event not found");
+      return res.status(404).json({ success: false, message: "Event not found" });
+    }
+    
+    return res.status(200).json({ success: true, event });
+  } catch (error) {
+    console.error("Error fetching event:", error);
+    return res.status(500).json({ success: false, message: "Server error", error });
+  }
+};

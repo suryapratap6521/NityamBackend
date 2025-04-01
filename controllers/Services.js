@@ -78,3 +78,38 @@ exports.getServices = async (req, res) => {
         });
     }
 };
+
+
+exports.getServiceById = async (req, res) => {
+  try {
+    const { id } = req.params;  // using route parameter
+    const service = await Services.findById(id)
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName email',
+        populate: {
+          path: 'communityDetails',
+          select: 'communityName'
+        }
+      })
+      .exec();
+
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: 'Service not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      service,
+    });
+  } catch (error) {
+    console.error("Error fetching service:", error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
