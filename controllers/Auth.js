@@ -291,16 +291,16 @@ exports.profileDetails = async (req, res) => {
 				message: "Gender and Date of Birth are required.",
 			});
 		}
-
+		const createdProfile=await Profile.create({
+			gender,
+			dateOfBirth
+		})
 		const userDetails = await User.findByIdAndUpdate(
 			userId,
-			{
-			  gender:gender,
-			  dateOfBirth: new Date(dateOfBirth),
-			},
+			{ additionalDetails: createdProfile._id },
 			{ new: true } // This returns the updated document
 		  ).populate("communityDetails").populate("additionalDetails");
-	  
+		  console.log(userDetails);
 		  // Check if the user was found and updated
 		  if (!userDetails) {
 			return res.status(404).json({
@@ -433,6 +433,8 @@ exports.communityAddress = async (req, res) => {
   exports.verification = async (req, res) => {
 	try {
 	  const { verificationByPostalCard, address } = req.body;
+	  console.log(address);
+	  console.log(verificationByPostalCard);
 	  const userId = req.user.id;
 	  let documentUrl = "";
 		
@@ -466,7 +468,7 @@ exports.communityAddress = async (req, res) => {
   
 	  // Update user details with the provided verification data
 	  userDetails.documentUrl = documentUrl || userDetails.documentUrl;  // Update only if a new document is uploaded
-	  userDetails.address = address || userDetails.address;  // Update address if provided
+	  userDetails.Address = address || userDetails.Address;  // Update address if provided
 	  userDetails.verificationByPostalCard = verificationByPostalCard || userDetails.verificationByPostalCard; // Update verification status
   
 	  // Save updated user details
@@ -631,7 +633,7 @@ exports.googleLogin = passport.authenticate('google', {
 		await user.save();
 		
 		// Re-fetch the updated user (if needed)
-		const updatedUser = await User.findById(user._id);
+		const updatedUser = await User.findById(user._id).populate("additionalDetails").populate('communityDetails');
 		
 		// Set cookies (stringify the user)
 		res.cookie('user', JSON.stringify(updatedUser), {
