@@ -68,7 +68,7 @@ const userSchema = new mongoose.Schema({
   },
   verificationByPostalCard: {
     type: String,
-    default: "No"
+    default: "false"
   },
   phoneNumber: {
     type: String,

@@ -4,11 +4,12 @@ const Page = require("../models/Page");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
+const Transaction = require("../models/Transaction");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY,
   key_secret: process.env.RAZORPAY_SECRET,
-}); 
+});
 
 
 // Create Advertised Post
@@ -41,8 +42,8 @@ exports.createAdvertisedPost = async (req, res) => {
         Array.isArray(body.communities)
           ? body.communities
           : body.communities
-          ? [body.communities]
-          : [],
+            ? [body.communities]
+            : [],
       buttonLabel: {
         type: body["buttonLabel[type]"],
         value: body["buttonLabel[value]"],
@@ -50,11 +51,11 @@ exports.createAdvertisedPost = async (req, res) => {
       premium: body.premium === "true",
     };
   };
-  
+
 
   try {
     const parsedBody = parseNestedFields(req.body);
-    console.log("Parsed Body:", parsedBody);
+    //console.log("Parsed Body:", parsedBody);
 
     // Validate ageGroup
     if (
@@ -158,7 +159,7 @@ exports.createAdvertisedPost = async (req, res) => {
         return res.status(400).json({ message: "Invalid option type." });
     }
 
-    console.log("Selected Communities:", selectedCommunities);
+    //console.log("Selected Communities:", selectedCommunities);
     if (!selectedCommunities.length) {
       return res
         .status(404)
@@ -173,7 +174,7 @@ exports.createAdvertisedPost = async (req, res) => {
       payment_capture: 1,
     };
     const order = await razorpay.orders.create(options);
-
+    console.log("orderrrrrrrrr", order)
     // Create the Advertised Post
     const newPost = new AdvertisedPost({
       title: parsedBody.title,
@@ -184,12 +185,20 @@ exports.createAdvertisedPost = async (req, res) => {
       createdBy: req.user.id,
       buttonLabel: parsedBody.buttonLabel,
       premium: parsedBody.premium, // New field for premium
+      orderId: order.id
     });
 
+    const newTransaction = new Transaction({
+      amount: parsedBody.price,
+      userId: req.user.id,
+      orderId: order.id,
+      status: 'created'
+    })
+
     // Safely handle file uploads if any
-    console.log("req.files:", req.files);
+    //console.log("req.files:", req.files);
     if (req.files) {
-      console.log("req.files.imagesArray:", req.files.imagesArray);
+      //console.log("req.files.imagesArray:", req.files.imagesArray);
     }
     const files =
       req.files && req.files.imagesArray
@@ -207,6 +216,7 @@ exports.createAdvertisedPost = async (req, res) => {
     }
 
     await newPost.save();
+    await newTransaction.save();
     await Page.findByIdAndUpdate(parsedBody.pageId, {
       $push: { advertisedPosts: newPost._id },
     });
@@ -238,54 +248,68 @@ exports.createAdvertisedPost = async (req, res) => {
   }
 };
 
+exports.verifyPayment = async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, postData } = req.body;
+  try {
+    // console.log("key", process.env.RAZORPAY_SECRET)
+    // console.log("ORDER_ID:", razorpay_order_id);
+    // console.log("PAYMENT_ID:", razorpay_payment_id);
+    // console.log("SIGNATURE_FROM_RAZORPAY:", razorpay_signature);
+    // console.log("SECRET:", process.env.RAZORPAY_SECRET);
+    const generatedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
 
+    console.log(razorpay_signature, generatedSignature)
 
-
-  
-
-
-  exports.verifyPayment = async (req, res) => {
-    try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, postData } = req.body;
-  
-      const generatedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest("hex");
-  
-      if (generatedSignature !== razorpay_signature) {
-        return res.status(400).json({ success: false, message: "Payment verification failed." });
-      }
-  
-      // Create the advertised post after successful payment
-      const newPost = new AdvertisedPost({
-        title: postData.title,
-        pageId: postData.pageId,
-        timeSlot: postData.timeSlot,
-        dateSlot: postData.dateSlot,
-        ageGroup: postData.ageGroup,
-        communities: postData.communities,
-        createdBy: req.user.id,
-        buttonLabel: postData.buttonLabel,
-      });
-  
-      if (postData.files && postData.files.length > 0) {
-        const uploadDetails = await uploadFilesToCloudinary(postData.files, process.env.FOLDER_NAME);
-        newPost.imagesArray = uploadDetails.map((file) => file.secure_url);
-      }
-  
-      await newPost.save();
-  
-      res.status(201).json({
-        success: true,
-        message: "Payment successful, advertised post created.",
-        post: newPost,
-      });
-    } catch (error) {
-      res.status(500).json({ success: false, message: "Error verifying payment.", error: error.message });
+    if (generatedSignature !== razorpay_signature) {
+      return res.status(400).json({ success: false, message: "Payment verification failed." });
     }
-  };
-   
+
+    // ✅ Update transaction status to "successful"
+    const updatedTransaction = await Transaction.findOneAndUpdate(
+      { orderId: razorpay_order_id },
+      { status: 'successful' },
+      { new: true }
+    );
+
+    if (!updatedTransaction) {
+      return res.status(404).json({ success: false, message: "Transaction not found." });
+    }
+
+    // Create the advertised post after successful payment
+    const newPost = new AdvertisedPost({
+      title: postData.title,
+      pageId: postData.pageId,
+      timeSlot: postData.timeSlot,
+      dateSlot: postData.dateSlot,
+      ageGroup: postData.ageGroup,
+      communities: postData.communities,
+      createdBy: req.user.id,
+      buttonLabel: postData.buttonLabel,
+      orderId: razorpay_order_id
+    });
+
+
+    if (postData.files && postData.files.length > 0) {
+      const uploadDetails = await uploadFilesToCloudinary(postData.files, process.env.FOLDER_NAME);
+      newPost.imagesArray = uploadDetails.map((file) => file.secure_url);
+    }
+
+    await newPost.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Payment successful, advertised post created.",
+      post: newPost,
+      transaction: updatedTransaction,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error verifying payment.", error: error.message });
+  }
+};
+
 
 // Get Advertised Posts
 exports.getAdvertisedPosts = async (req, res) => {
@@ -382,167 +406,166 @@ exports.replyToComment = async (req, res) => {
 
 // Get communities by states
 exports.getCommunitiesByStates = async (req, res) => {
-    try {
-      const { states } = req.body;
-  
-      if (!states || !Array.isArray(states) || states.length === 0) {
-        return res.status(400).json({ message: "States are required and should be an array." });
-      }
-  
-      // Fetch communities based on states
-      const communities = await Community.aggregate([
-        {
-          $lookup: {
-            from: "users", // 'users' is the collection name for User schema
-            localField: "userInCommunity",
-            foreignField: "_id",
-            as: "userDetails",
-          },
-        },
-        {
-          $match: {
-            "userDetails.state": { $in: states },
-          },
-        },
-      ]);
-  
-      if (communities.length === 0) {
-        return res.status(404).json({ message: "No communities found for the provided states." });
-      }
-  
-      res.status(200).json({ message: "Communities fetched successfully.", communities });
-    } catch (error) {
-      console.error("Error fetching communities by states:", error);
-      res.status(500).json({ message: "Internal server error." });
-    }
-  };
+  try {
+    const { states } = req.body;
 
-  // Get communities by cities
-  exports.getCommunitiesByCities = async (req, res) => {
-    try {
-      const { cities } = req.body;
-  
-      // Validate input
-      if (!cities || !Array.isArray(cities) || cities.length === 0) {
-        return res.status(400).json({ message: "Cities are required and should be an array." });
-      }
-  
-      // Perform aggregation to find communities based on users' cities
-      const communities = await Community.aggregate([
-        {
-          $lookup: {
-            from: "users", // Name of the users collection
-            localField: "userInCommunity", // Field in Community referencing user IDs
-            foreignField: "_id", // Field in User corresponding to IDs
-            as: "userDetails", // Alias for joined user data
-          },
-        },
-        {
-          $match: {
-            "userDetails.city": { $in: cities }, // Match cities in userDetails
-          },
-        },
-      ]);
-  
-      if (communities.length === 0) {
-        return res.status(404).json({ message: "No communities found for the provided cities." });
-      }
-  
-      res.status(200).json({
-        message: "Communities fetched successfully.",
-        communities,
-      });
-    } catch (error) {
-      console.error("Error fetching communities by cities:", error);
-      res.status(500).json({ message: "Internal server error.", error: error.message });
+    if (!states || !Array.isArray(states) || states.length === 0) {
+      return res.status(400).json({ message: "States are required and should be an array." });
     }
-  };
-  
+
+    // Fetch communities based on states
+    const communities = await Community.aggregate([
+      {
+        $lookup: {
+          from: "users", // 'users' is the collection name for User schema
+          localField: "userInCommunity",
+          foreignField: "_id",
+          as: "userDetails",
+        },
+      },
+      {
+        $match: {
+          "userDetails.state": { $in: states },
+        },
+      },
+    ]);
+
+    if (communities.length === 0) {
+      return res.status(404).json({ message: "No communities found for the provided states." });
+    }
+
+    res.status(200).json({ message: "Communities fetched successfully.", communities });
+  } catch (error) {
+    console.error("Error fetching communities by states:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+// Get communities by cities
+exports.getCommunitiesByCities = async (req, res) => {
+  try {
+    const { cities } = req.body;
+
+    // Validate input
+    if (!cities || !Array.isArray(cities) || cities.length === 0) {
+      return res.status(400).json({ message: "Cities are required and should be an array." });
+    }
+
+    // Perform aggregation to find communities based on users' cities
+    const communities = await Community.aggregate([
+      {
+        $lookup: {
+          from: "users", // Name of the users collection
+          localField: "userInCommunity", // Field in Community referencing user IDs
+          foreignField: "_id", // Field in User corresponding to IDs
+          as: "userDetails", // Alias for joined user data
+        },
+      },
+      {
+        $match: {
+          "userDetails.city": { $in: cities }, // Match cities in userDetails
+        },
+      },
+    ]);
+
+    if (communities.length === 0) {
+      return res.status(404).json({ message: "No communities found for the provided cities." });
+    }
+
+    res.status(200).json({
+      message: "Communities fetched successfully.",
+      communities,
+    });
+  } catch (error) {
+    console.error("Error fetching communities by cities:", error);
+    res.status(500).json({ message: "Internal server error.", error: error.message });
+  }
+};
+
 
 exports.likeCommentOrReply = async (req, res) => {
-    try {
-      const { postId, commentId, replyId } = req.body;
-      const userId = req.user.id;
-  
-      const post = await AdvertisedPost.findById(postId);
-  
-      if (!post) {
-        return res.status(404).json({ success: false, message: "Post not found." });
-      }
-  
-      const comment = post.comments.id(commentId);
-  
-      if (!comment) {
-        return res.status(404).json({ success: false, message: "Comment not found." });
-      }
-  
-      let target = comment;
-      if (replyId) {
-        target = comment.replies.id(replyId);
-        if (!target) {
-          return res.status(404).json({ success: false, message: "Reply not found." });
-        }
-      }
-  
-      if (target.likes.includes(userId)) {
-        target.likes = target.likes.filter((id) => id.toString() !== userId);
-      } else {
-        target.likes.push(userId);
-      }
-  
-      await post.save();
-      res.status(200).json({ success: true, message: "Like status updated.", post });
-    } catch (error) {
-      res.status(500).json({ success: false, message: "Error updating like.", error: error.message });
-    }
-  };
+  try {
+    const { postId, commentId, replyId } = req.body;
+    const userId = req.user.id;
 
-  
+    const post = await AdvertisedPost.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    const comment = post.comments.id(commentId);
+
+    if (!comment) {
+      return res.status(404).json({ success: false, message: "Comment not found." });
+    }
+
+    let target = comment;
+    if (replyId) {
+      target = comment.replies.id(replyId);
+      if (!target) {
+        return res.status(404).json({ success: false, message: "Reply not found." });
+      }
+    }
+
+    if (target.likes.includes(userId)) {
+      target.likes = target.likes.filter((id) => id.toString() !== userId);
+    } else {
+      target.likes.push(userId);
+    }
+
+    await post.save();
+    res.status(200).json({ success: true, message: "Like status updated.", post });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error updating like.", error: error.message });
+  }
+};
+
+
 exports.addNestedReply = async (req, res) => {
-    try {
-      const { postId, commentId, replyId, text } = req.body;
-      const userId = req.user.id;
-  
-      const post = await AdvertisedPost.findById(postId);
-  
-      if (!post) {
-        return res.status(404).json({ success: false, message: "Post not found." });
-      }
-  
-      const comment = post.comments.id(commentId);
-  
-      if (!comment) {
-        return res.status(404).json({ success: false, message: "Comment not found." });
-      }
-  
-      let target = comment;
-      if (replyId) {
-        target = comment.replies.id(replyId);
-        if (!target) {
-          return res.status(404).json({ success: false, message: "Reply not found." });
-        }
-      }
-  
-      target.replies.push({
-        repliedBy: userId,
-        text,
-      });
-  
-      await post.save();
-      res.status(201).json({ success: true, message: "Reply added successfully.", post });
-    } catch (error) {
-      res.status(500).json({ success: false, message: "Error adding reply.", error: error.message });
+  try {
+    const { postId, commentId, replyId, text } = req.body;
+    const userId = req.user.id;
+
+    const post = await AdvertisedPost.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found." });
     }
-  };
-  
- exports.getCommunities= async (req, res) => {
-    try {
-      // Fetch only the "name" field from the communities
-      const communities = await Community.find({}, 'communityName'); // Second argument specifies the fields to include
-      res.status(200).json(communities); // Return only community names
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Unable to fetch community names' });
+
+    const comment = post.comments.id(commentId);
+
+    if (!comment) {
+      return res.status(404).json({ success: false, message: "Comment not found." });
     }
-  };
-  
+
+    let target = comment;
+    if (replyId) {
+      target = comment.replies.id(replyId);
+      if (!target) {
+        return res.status(404).json({ success: false, message: "Reply not found." });
+      }
+    }
+
+    target.replies.push({
+      repliedBy: userId,
+      text,
+    });
+
+    await post.save();
+    res.status(201).json({ success: true, message: "Reply added successfully.", post });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error adding reply.", error: error.message });
+  }
+};
+
+exports.getCommunities = async (req, res) => {
+  try {
+    // Fetch only the "name" field from the communities
+    const communities = await Community.find({}, 'communityName'); // Second argument specifies the fields to include
+    res.status(200).json(communities); // Return only community names
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to fetch community names' });
+  }
+};
