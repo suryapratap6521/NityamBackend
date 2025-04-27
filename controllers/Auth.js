@@ -291,12 +291,15 @@ exports.profileDetails = async (req, res) => {
 				message: "Gender and Date of Birth are required.",
 			});
 		}
+		const updateProfileDetails=Profile.create({
+			gender,
+			dateOfBirth
+		})
 
 		const userDetails = await User.findByIdAndUpdate(
 			userId,
 			{
-			  gender:gender,
-			  dateOfBirth: new Date(dateOfBirth),
+			  additionalDetails: updateProfileDetails._id,
 			},
 			{ new: true } // This returns the updated document
 		  ).populate("communityDetails").populate("additionalDetails");
@@ -653,9 +656,9 @@ exports.googleLogin = passport.authenticate('google', {
 		  (updatedUser.city && updatedUser.state && updatedUser.postalCost && updatedUser.community);
 		
 		if (hasOnboarding) {
-		  return res.redirect('http://localhost:3000/dashboard');
+		  return res.redirect('http://localhost:3000/google-auth-success');
 		} else {
-		  return res.redirect('http://localhost:3000/profiledetails');
+		  return res.redirect('http://localhost:3000/google-auth-successs');
 		}
 	  } catch (error) {
 		console.error("Google Callback Error:", error);
