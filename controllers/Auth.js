@@ -638,14 +638,14 @@ exports.googleLogin = passport.authenticate('google', {
 		// Set cookies (stringify the user)
 		res.cookie('user', JSON.stringify(updatedUser), {
 		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		  secure: true,
+		//   secure: true,
 		//   sameSite: 'None',
 
 		});
 		res.cookie('token', token, {
 		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		  httpOnly: true,
-		  secure: true,
+		  httpOnly: false,
+		//   secure: true,
 		//   sameSite: 'None',
 		});
 		
