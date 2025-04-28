@@ -610,7 +610,7 @@ exports.googleLogin = passport.authenticate('google', {
   
   // Google OAuth2 callback route
   exports.googleCallback = (req, res, next) => {
-	passport.authenticate('google', { failureRedirect: '/login' }, async (err, user, info) => {
+	passport.authenticate('google', { failureRedirect: '/signup' }, async (err, user, info) => {
 	  try {
 		if (err) {
 		  return res.status(500).json({ message: 'Internal Server Error', error: err });
