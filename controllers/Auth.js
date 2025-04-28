@@ -638,11 +638,15 @@ exports.googleLogin = passport.authenticate('google', {
 		// Set cookies (stringify the user)
 		res.cookie('user', JSON.stringify(updatedUser), {
 		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		  httpOnly: false,
+		  secure: true,
+		//   sameSite: 'None',
+
 		});
 		res.cookie('token', token, {
 		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		  httpOnly: false,
+		  httpOnly: true,
+		  secure: true,
+		//   sameSite: 'None',
 		});
 		
 		// Determine if onboarding is complete.
@@ -655,9 +659,9 @@ exports.googleLogin = passport.authenticate('google', {
 		  (updatedUser.city && updatedUser.state && updatedUser.postalCost && updatedUser.community);
 		
 		if (hasOnboarding) {
-		  return res.redirect('http://localhost:3000/google-auth-success');
+		  return res.redirect('https://nityam-frontend-lemon.vercel.app/google-auth-success');
 		} else {
-		  return res.redirect('http://localhost:3000/google-auth-successs');
+		  return res.redirect('https://nityam-frontend-lemon.vercel.app/google-auth-success');
 		}
 	  } catch (error) {
 		console.error("Google Callback Error:", error);
