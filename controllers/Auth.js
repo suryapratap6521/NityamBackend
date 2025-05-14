@@ -552,7 +552,10 @@ exports.login = async (req, res) => {
 		}
 
 		// Check if the user exists
-		const user = await User.findOne({ email }).populate("additionalDetails").populate('communityDetails');
+	const user = await User.findOne({ email })
+  	.populate('additionalDetails')
+  	.populate('communityDetails');
+	console.log(user,"-------->user");
 		if (!user) {
 			return res.status(401).json({
 				success: false,
@@ -561,6 +564,8 @@ exports.login = async (req, res) => {
 		}
 
 		// Compare the provided password with the hashed password in DB
+		console.log(password);
+		console.log(user.password);
 		const isPasswordValid = await bcrypt.compare(password, user.password);
 		if (!isPasswordValid) {
 			return res.status(401).json({
