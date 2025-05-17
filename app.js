@@ -1,5 +1,6 @@
 // Updated server/app.js with environment-based PORT and Socket.IO CORS cleanup
 const express = require("express");
+const {setupSocket} = require("./socket/connection");
 const app = express();
 const http = require("http");
 const server = http.createServer(app);
@@ -97,7 +98,9 @@ server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
 
-// Socket.IO setup
+
+// Socket.IO Events
+// Socket.IO setup (cleaned & modular)
 const io = socketIO(server, {
   cors: {
     origin: allowedOrigins,
@@ -108,55 +111,5 @@ const io = socketIO(server, {
 
 global.io = io;
 
-// Socket.IO Events
-io.on("connection", (socket) => {
-  console.log("Socket.IO connected");
-
-  socket.on("setup", (userData) => {
-    socket.join(userData._id);
-    socket.emit("connected");
-  });
-
-  socket.on("join chat", (room) => {
-    socket.join(room);
-    console.log("User joined room:", room);
-  });
-
-  socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
-
-  socket.on("new message", (newMessage) => {
-    const chat = newMessage.chat;
-    if (!chat?.users) return;
-    chat.users.forEach((user) => {
-      if (user._id !== newMessage.sender._id) {
-        socket.in(user._id).emit("message received", newMessage);
-        socket.in(user._id).emit("chat updated", {
-          chatId: chat._id,
-          latestMessage: newMessage
-        });
-      }
-    });
-  });
-
-  socket.on("message seen", async ({ messageId }) => {
-    const Message = require("./models/Message");
-    const updated = await Message.findByIdAndUpdate(
-      messageId,
-      { status: "seen" },
-      { new: true }
-    );
-    socket.broadcast.emit("message status updated", updated);
-  });
-
-  socket.on("message deleted", ({ messageId }) => {
-    socket.broadcast.emit("message removed", { messageId });
-  });
-
-  socket.on("message edited", ({ message }) => {
-    socket.broadcast.emit("message updated", message);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Socket.IO disconnected");
-  });
-});
+// 👉 Delegate all socket event logic to the handler module
+setupSocket(io)
