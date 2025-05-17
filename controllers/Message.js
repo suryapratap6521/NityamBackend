@@ -1,10 +1,11 @@
+// ✅ Final Phase 1 updates merged into your working backend (message controller)
 const Message = require("../models/Message");
 const User = require("../models/User");
 const Chat = require("../models/Chat");
-const Notification=require("../models/Notification");
+const Notification = require("../models/Notification");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
 
-
+// ✅ SEND MESSAGE
 exports.sendMessage = async (req, res) => {
   try {
     const { content, chatId, type } = req.body;
@@ -42,6 +43,7 @@ exports.sendMessage = async (req, res) => {
       media: mediaData.url ? mediaData : undefined,
       type: mediaData.type || type || "text",
       status: "sent",
+      readBy: [userId],
     };
 
     let message = await Message.create(newMessage);
@@ -68,145 +70,194 @@ exports.sendMessage = async (req, res) => {
   }
 };
 
+// ✅ GET ALL MESSAGES
+exports.allMessages = async (req, res) => {
+  try {
+    const messages = await Message.find({ chat: req.params.chatId })
+      .populate("sender", "firstName lastName image")
+      .populate("chat")
+      .exec();
+
+    return res.status(200).json({
+      success: true,
+      message: "All messages",
+      messages,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+// ✅ UNREAD COUNT
+exports.unreadCount = async (req, res) => {
+  try {
+    const messages = await Message.find({
+      chat: req.params.chatId,
+      readBy: { $ne: req.user.id },
+    });
+    res.status(200).json({ unreadCount: messages.length });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching unread count" });
+  }
+};
+
+// ✅ MARK MESSAGE AS DELIVERED
+exports.markDelivered = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      { status: "delivered" },
+      { new: true }
+    );
+    return res.status(200).json({ success: true, message });
+  } catch (error) {
+    console.error("Error updating to delivered:", error);
+    return res.status(500).json({ success: false });
+  }
+};
 
 
-    exports.allMessages = async (req, res) => {
-        try {
-         const messages=await Message.find({ chat: req.params.chatId })
-         .populate("sender")
-         .populate("chat")
-         .exec()
-         return res.status(200).json({
-             success:true,
-             json:"All messages",
-             messages
-         })
-        } catch (error) {
-         return res.status(500).json({
-             success:false,
-             json:"Internal server error"
-         })
-        }
-     };
+// Mark as delivered
+exports.markDelivered = async (req, res) => {
+  try {
+    const { messageId } = req.params;
 
+    const updated = await Message.findByIdAndUpdate(
+      messageId,
+      { status: "delivered" },
+      { new: true }
+    );
 
-     exports.unreadCount= async (req, res) => {
-        try {
-          const messages = await Message.find({
-            chat: req.params.chatId,
-            readBy: { $ne: req.user.id }
-          });
-          res.status(200).json({ unreadCount: messages.length });
-        } catch (error) {
-          res.status(500).json({ message: "Error fetching unread count" });
-        }
-      };
-      
-      // Add reaction to a message
+    return res.status(200).json({ success: true, message: updated });
+  } catch (error) {
+    console.error("Mark delivered error:", error);
+    return res.status(500).json({ success: false, message: "Internal error" });
+  }
+};
+
+// Mark as seen
+exports.markSeen = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const updated = await Message.findByIdAndUpdate(
+      messageId,
+      {
+        status: "seen",
+        $addToSet: { readBy: userId }, // Avoid duplicates
+      },
+      { new: true }
+    );
+
+    return res.status(200).json({ success: true, message: updated });
+  } catch (error) {
+    console.error("Mark seen error:", error);
+    return res.status(500).json({ success: false, message: "Internal error" });
+  }
+};
+
 exports.addReaction = async (req, res) => {
-    const { messageId, emoji } = req.body;
-    const userId = req.user.id;
-  
-    try {
-      const message = await Message.findByIdAndUpdate(
-        messageId,
-        {
-          $addToSet: { reactions: { user: userId, emoji } },
-        },
-        { new: true }
-      ).populate("reactions.user", "firstName lastName image");
-  
-      return res.status(200).json({ success: true, message });
-    } catch (error) {
-      console.error("Add reaction error:", error);
-      return res.status(500).json({ success: false, message: "Server error" });
+  const { messageId, emoji } = req.body;
+  const userId = req.user.id;
+
+  try {
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      {
+        $addToSet: { reactions: { user: userId, emoji } },
+      },
+      { new: true }
+    ).populate("reactions.user", "firstName lastName image");
+
+    return res.status(200).json({ success: true, message });
+  } catch (error) {
+    console.error("Add reaction error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+exports.removeReaction = async (req, res) => {
+  const { messageId, emoji } = req.body;
+  const userId = req.user.id;
+
+  try {
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      {
+        $pull: { reactions: { user: userId, emoji } },
+      },
+      { new: true }
+    ).populate("reactions.user", "firstName lastName image");
+
+    return res.status(200).json({ success: true, message });
+  } catch (error) {
+    console.error("Remove reaction error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+exports.editMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { newContent } = req.body;
+
+    const updated = await Message.findByIdAndUpdate(
+      messageId,
+      { content: newContent, edited: true },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Message not found" });
     }
-  };
-  
-  // Remove reaction
-  exports.removeReaction = async (req, res) => {
-    const { messageId, emoji } = req.body;
-    const userId = req.user.id;
-  
-    try {
-      const message = await Message.findByIdAndUpdate(
-        messageId,
-        {
-          $pull: { reactions: { user: userId, emoji } },
-        },
-        { new: true }
-      ).populate("reactions.user", "firstName lastName image");
-  
-      return res.status(200).json({ success: true, message });
-    } catch (error) {
-      console.error("Remove reaction error:", error);
-      return res.status(500).json({ success: false, message: "Server error" });
-    }
-  };
-  
-// DELETE a message
+
+    return res.status(200).json({ success: true, message: "Message updated", data: updated });
+  } catch (error) {
+    console.error("Edit message error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 exports.deleteMessage = async (req, res) => {
-    try {
-      const { messageId } = req.params;
-      const deleted = await Message.findByIdAndDelete(messageId);
-  
-      if (!deleted) {
-        return res.status(404).json({ success: false, message: "Message not found" });
-      }
-  
-      return res.status(200).json({ success: true, message: "Message deleted", data: deleted });
-    } catch (error) {
-      console.error("Delete message error:", error);
-      return res.status(500).json({ success: false, message: "Server error" });
+  try {
+    const { messageId } = req.params;
+    const deleted = await Message.findByIdAndDelete(messageId);
+
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Message not found" });
     }
-  };
-  
-  // EDIT a message
-  exports.editMessage = async (req, res) => {
-    try {
-      const { messageId } = req.params;
-      const { newContent } = req.body;
-  
-      const updated = await Message.findByIdAndUpdate(
-        messageId,
-        { content: newContent, edited: true },
-        { new: true }
-      );
-  
-      if (!updated) {
-        return res.status(404).json({ success: false, message: "Message not found" });
-      }
-  
-      return res.status(200).json({ success: true, message: "Message updated", data: updated });
-    } catch (error) {
-      console.error("Edit message error:", error);
-      return res.status(500).json({ success: false, message: "Server error" });
-    }
-  };
-  exports.searchMessages = async (req, res) => {
-    const { chatId } = req.params;
-    const { keyword } = req.query;
-  
-    if (!keyword) {
-      return res.status(400).json({ success: false, message: "Keyword is required" });
-    }
-  
-    try {
-      const messages = await Message.find({
-        chat: chatId,
-        content: { $regex: keyword, $options: "i" }, // case-insensitive search
-      })
-        .populate("sender", "firstName lastName image")
-        .sort({ createdAt: -1 });
-  
-      return res.status(200).json({
-        success: true,
-        count: messages.length,
-        results: messages,
-      });
-    } catch (error) {
-      console.error("Search error:", error);
-      return res.status(500).json({ success: false, message: "Search failed" });
-    }
-  };
-  
+
+    return res.status(200).json({ success: true, message: "Message deleted", data: deleted });
+  } catch (error) {
+    console.error("Delete message error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+exports.searchMessages = async (req, res) => {
+  const { chatId } = req.params;
+  const { keyword } = req.query;
+
+  if (!keyword) {
+    return res.status(400).json({ success: false, message: "Keyword is required" });
+  }
+
+  try {
+    const messages = await Message.find({
+      chat: chatId,
+      content: { $regex: keyword, $options: "i" }, // case-insensitive search
+    })
+      .populate("sender", "firstName lastName image")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: messages.length,
+      results: messages,
+    });
+  } catch (error) {
+    console.error("Search error:", error);
+    return res.status(500).json({ success: false, message: "Search failed" });
+  }
+};
