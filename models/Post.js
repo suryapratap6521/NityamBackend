@@ -1,127 +1,127 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const commentSchema = new mongoose.Schema({
-  
-  commentedBy: {
-    type: mongoose.Types.ObjectId,
+// Recursive reply schema (for true nested replies)
+const replySchema = new mongoose.Schema({
+  repliedBy: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: "User",
+    required: true,
   },
   text: {
     type: String,
-    // required: true,
-  },
-  commentedAt: {
-    type: Date,
-    default: new Date(),
     required: true,
+  },
+  repliedAt: {
+    type: Date,
+    default: Date.now,
   },
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
   }],
-  replies: [{
-    repliedBy: {
-      type: mongoose.Types.ObjectId,
-      ref: "User",
-    },
-    text: {
-      type: String,
-      // required: true,
-    },
-    repliedAt: {
-      type: Date,
-      default: new Date(),
-      required: true,
-    },
-    likes: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    }]
-  }]
+  replies: [this], // ✅ recursive nesting
 });
 
+// Comment schema
+const commentSchema = new mongoose.Schema({
+  commentedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  text: {
+    type: String,
+    required: true,
+  },
+  commentedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  likes: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  }],
+  replies: [replySchema], // ✅ nested replies
+});
+
+// Poll option schema
 const pollOptionSchema = new mongoose.Schema({
   option: {
     type: String,
     required: true,
   },
   votes: [{
-    type: mongoose.Types.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-  }]
+  }],
 });
 
-// Post Schema
+// Main Post schema
 const postSchema = new mongoose.Schema({
   postType: {
-    type: String,  // 'post', 'event', or 'poll'
+    type: String, // 'post', 'event', 'poll', 'repost'
     required: true,
   },
-  
-  // Common Fields
+
   postByUser: {
-    type: mongoose.Types.ObjectId,
-    ref: 'User',
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
   },
+
+  // Basic content
   title: {
     type: String,
+    trim: true,
   },
-  description:{
-    type:String,
+  description: {
+    type: String,
+    trim: true,
   },
   imgPath: [{
     type: String,
     trim: true,
   }],
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  }, eventType: {
-    type: String,
-  },
-  eventName: {
-    type: String,
-  },
-  startDate: {
-    type: Date,
-  },
-  endDate: {
-    type: Date,
-  },
-  location: {
-    type: String,
-  },
-  hostedBy: {
-    type: String,
-  },
- 
 
-  // Poll-specific Fields
+  // Likes
+  likes: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  }],
+
+  // Comments
+  comments: [commentSchema],
+
+  // Event-specific
+  eventType: String,
+  eventName: String,
+  startDate: Date,
+  endDate: Date,
+  location: String,
+  hostedBy: String,
+
+  // Poll-specific
   pollOptions: {
     type: [pollOptionSchema],
     validate: {
       validator: function (v) {
-        // Only validate poll options if postType is 'poll'
-        if (this.postType === 'poll') {
-          return v.length >= 2 && v.length <= 4; // Min 2 options, Max 4 options
-        }
-        // Return true if postType is not 'poll' (skip validation)
-        return true;
+        return this.postType !== 'poll' || (v.length >= 2 && v.length <= 4);
       },
-      message: 'A poll must have between 2 and 4 options.',
-    },
+      message: "Poll must have 2 to 4 options",
+    }
   },
-  like: [{
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-  }],
-  likes: [String],
-  checkLike: {
-    type: Boolean,
-    default: false,
+
+  // Repost
+  repostedFrom: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Post",
+    default: null,
   },
-  comments: [commentSchema],
+
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  }
 });
 
-const Post = mongoose.model('Post', postSchema);
-module.exports = Post; 
+module.exports = mongoose.model("Post", postSchema);

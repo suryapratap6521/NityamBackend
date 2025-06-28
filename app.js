@@ -1,155 +1,178 @@
-// app.js
-const express = require("express");
-const app = express();
-const http = require("http");
-const server = http.createServer(app);
-const path = require("path");
-const userRoutes = require("./routes/User");
-const postRoutes = require("./routes/Post");
-const likeRoutes = require("./routes/Like");
-const commentRoutes = require("./routes/Comment");
-const chatRoutes = require("./routes/Chat");
-const messageRoutes = require("./routes/Message");
-const profileRoutes = require("./routes/Profile");
-const serviceRoutes = require("./routes/Services");
-const accessToken = require('./routes/Get_AccessToken');
-const pageRoutes = require("./routes/Page");
-const advRoutes = require("./routes/advPostRoutes");
-const notificationRoutes = require("./routes/Notification");
-const database = require("./config/database");
-const cookieParser = require("cookie-parser");
-const cors = require("cors");
-const { cloudinaryConnect } = require("./config/cloudinary");
-const fileUpload = require("express-fileupload");
-const dotenv = require("dotenv");
-const passport = require('./config/passport');
-const session = require('express-session');
-const socketIO = require('socket.io');
+  // ✅ app.js (Backend Server with Real-time Message & Status Handling)
+  const express = require("express");
+  const app = express();
+  const http = require("http");
+  const server = http.createServer(app);
+  const socketIO = require("socket.io");
+  const cors = require("cors");
+  const path = require("path");
+  const dotenv = require("dotenv");
+  const fileUpload = require("express-fileupload");
+  const cookieParser = require("cookie-parser");
+  const session = require("express-session");
+  const passport = require("./config/passport");
 
-dotenv.config();
-const PORT = process.env.PORT || 4000;
+  const { cloudinaryConnect } = require("./config/cloudinary");
+  const database = require("./config/database");
+  const Message = require("./models/Message");
+  const Chat = require("./models/Chat");
+  const User = require("./models/User");
 
-// Connect to the database
-database.connect();
+  // 🌐 Load env
+  dotenv.config();
+  const PORT = process.env.PORT || 8080;
 
-// Define allowed origins based on your environments
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://nityam-frontend-lemon.vercel.app"
-];
+  // 🛠 DB Connect
+  database.connect();
 
-// Configure CORS middleware to dynamically allow origins in your list
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        return callback(null, true);
-      } else {
-        return callback(new Error("Not allowed by CORS"));
-      }
+  const allowedOrigins = ["http://localhost:3000", "https://nityam-frontend-lemon.vercel.app"];
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error("Not allowed by CORS"));
     },
-    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
-  })
-);
+  }));
 
-// Remove manual header settings; they are now handled by cors middleware
-app.use(express.json());
-app.use(cookieParser());
-app.use(
-  fileUpload({
+  app.use(express.json());
+  app.use(cookieParser());
+  app.use(fileUpload({
     useTempFiles: true,
     tempFileDir: path.join(__dirname, "tmp"),
     createParentPath: true,
-  })
-);
-
-app.use(session({
+  }));
+  app.use(session({
     secret: "asdfghjklkjhgfdfghj",
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false } // Set secure: true if using HTTPS
-}));
+    cookie: { secure: false },
+  }));
+  app.use(passport.initialize());
+  app.use(passport.session());
+  cloudinaryConnect();
 
-app.use(passport.initialize());
-app.use(passport.session());
+  // 🛣️ Routes
+  app.use("/api/v1/auth", require("./routes/User"));
+  app.use("/api/v1/post", require("./routes/Post"));
+  app.use("/api/v1/like", require("./routes/Like"));
+  app.use("/api/v1/comment", require("./routes/Comment"));
+  app.use("/api/v1/chat", require("./routes/Chat"));
+  app.use("/api/v1/message", require("./routes/Message"));
+  app.use("/api/v1/profile", require("./routes/Profile"));
+  app.use("/api/v1/services", require("./routes/Services"));
+  app.use("/api/v1/page", require("./routes/Page"));
+  app.use("/api/v1/token", require("./routes/Get_AccessToken"));
+  app.use("/api/v1/advpost", require("./routes/advPostRoutes"));
+  app.use("/api/v1/notifications", require("./routes/Notification"));
 
-// Cloudinary Connection
-cloudinaryConnect();
+  app.get("/", (_, res) => res.json({ success: true, message: "Server running" }));
 
-// Mount routes
-app.use("/api/v1/auth", userRoutes);
-app.use("/api/v1/post", postRoutes);
-app.use("/api/v1/like", likeRoutes);
-app.use("/api/v1/comment", commentRoutes);
-app.use("/api/v1/chat", chatRoutes);
-app.use("/api/v1/message", messageRoutes);
-app.use("/api/v1/profile", profileRoutes);
-app.use("/api/v1/services", serviceRoutes);
-app.use("/api/v1/page", pageRoutes);
-app.use("/api/v1/token", accessToken);
-app.use("/api/v1/advpost", advRoutes);
-app.use("/api/v1/notifications", notificationRoutes);
-
-// Default Route
-app.get("/", (req, res) => {
-  return res.json({
-    success: true,
-    message: "Your Server is Up and Running"
+  server.listen(PORT, () => {
+    console.log(`✅ Your app is running at ${PORT}`);
   });
-});
+ 
 
-// Activate server
-server.listen(8080, () => {
-  console.log(`Your app is running at ${PORT}`);
-});
+  // 🔌 Socket.IO Setup
+  const io = socketIO(server, {
+    cors: {
+      origin: allowedOrigins,
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+  });
+ global.io = io; // ✅ Make Socket.IO accessible globally
+  const userSocketMap = {};
 
-// Set up Socket.IO with proper CORS configuration
-const io = socketIO(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-    credentials: true,
+
+
+  io.on("connection", (socket) => {
+    console.log("✅ Socket connected");
+
+    socket.on("setup", async (userData) => {
+      console.log("user",userData);
+      console.log("🟢 User connected:", userData._id);
+      console.log("Socket ID:", socket.id);
+      if (!userData || !userData._id) {
+        console.error("⚠️ Invalid user data received in setup");
+        return socket.emit("error", "Invalid user data");
+      }
+      socket.join(userData._id);
+      userSocketMap[socket.id] = userData._id;
+      await User.findByIdAndUpdate(userData._id, { isOnline: true, lastSeen: new Date() });
+      io.emit("online-status-changed", { userId: userData._id, isOnline: true, lastSeen: new Date() });
+      socket.emit("connected");
+    });
+
+    socket.on("join chat", (room) => socket.join(room));
+
+    socket.on("typing", (room) => socket.to(room).emit("typing"));
+    socket.on("stop typing", (room) => socket.to(room).emit("stop typing"));
+
+    socket.on("message delivered", async ({ messageId, userId }) => {
+      try {
+        const msg = await Message.findById(messageId);
+        if (msg && !msg.deliveredTo.includes(userId)) {
+          msg.deliveredTo.push(userId);
+          if (msg.status !== "seen") msg.status = "delivered";
+          await msg.save();
+        }
+      } catch (e) {
+        console.error("delivery error:", e);
+      }
+    });
+
+    socket.on("message seen", async ({ messageId, userId }) => {
+      try {
+        const msg = await Message.findById(messageId).populate("chat");
+        if (!msg || msg.seenBy.includes(userId)) return;
+        msg.seenBy.push(userId);
+        msg.status = "seen";
+        await msg.save();
+        io.in(msg.chat._id.toString()).emit("message seen updated", { messageId, userId });
+      } catch (e) {
+        console.error("seen error:", e);
+      }
+    });
+
+    socket.on("new Message", (msg) => {
+      const chat = msg.chat;
+      if (!chat?.users) return;
+      chat.users.forEach((u) => {
+        if (u._id === msg.sender._id) return;
+        socket.in(u._id).emit("message recieved", msg);
+      });
+    });
+
+  socket.on("disconnect", async () => {
+  try {
+    const userId = socket.userId || userSocketMap[socket.id]; // ✅ Fallback check
+    delete userSocketMap[socket.id]; // ✅ Clean up mapping
+
+    console.log("🔴 Socket disconnected:", socket.id);
+    console.log("🧾 User ID:", userId);
+
+    if (userId) {
+      // Update user status in DB
+      const lastSeen = new Date();
+      await User.findByIdAndUpdate(userId, {
+        isOnline: false,
+        lastSeen,
+      });
+
+      // Notify others of user's offline status
+      io.emit("online-status-changed", {
+        userId,
+        isOnline: false,
+        lastSeen,
+      });
+
+      console.log("🟡 User marked offline in DB:", userId);
+    } else {
+      console.warn("⚠️ No userId found for this disconnected socket.");
+    }
+  } catch (error) {
+    console.error("❌ Error during disconnect handling:", error.message);
   }
 });
 
-global.io = io; // Make `io` globally accessible
-
-// Socket.IO connection events
-io.on("connection", (socket) => {
-  console.log("Connected to Socket.IO");
-
-  socket.on("setup", (userData) => {
-    console.log("Setting up socket room for user:", userData._id);
-    socket.join(userData._id);
-    socket.emit("connected");
   });
-
-  socket.on("newNotification", (notification) => {
-    socket.to(notification.recipient.toString()).emit("notificationReceived", notification);
-  });
-
-  socket.on("join chat", (room) => {
-    socket.join(room);
-    console.log("User joined room: " + room);
-  });
-
-  socket.on("typing", (room) => socket.in(room).emit("typing"));
-  socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
-
-  socket.on("new Message", (newMessageRecieved) => {
-    const chat = newMessageRecieved.chat;
-    if (!chat.users) return console.log("Chat users not defined");
-
-    chat.users.forEach((user) => {
-      if (user._id === newMessageRecieved.sender._id) return;
-      socket.in(user._id).emit("message recieved", newMessageRecieved);
-    });
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected from Socket.IO");
-  });
-});

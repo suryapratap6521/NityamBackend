@@ -2,65 +2,67 @@ const Message = require("../models/Message");
 const User = require("../models/User");
 const Chat = require("../models/Chat");
 const Notification=require("../models/Notification");
+const Post =require('../models/Post');
+
 exports.sendMessage = async (req, res) => {
-    const { user } = req.user;
-    const { content, chatId } = req.body;
-    
-    if (!content || !chatId) {
-        return res.status(400).json({
-            success: false,
-            message: "All fields are required",
-        });
+  const { content, chatId, sharedPostId } = req.body;
+
+  if ((!content && !sharedPostId) || !chatId) {
+    return res.status(400).json({
+      success: false,
+      message: "Message content or shared post required",
+    });
+  }
+
+  const newMessage = {
+    sender: req.user.id,
+    content: content || "",
+    chat: chatId,
+  };
+
+  if (sharedPostId) {
+    newMessage.sharedPost = sharedPostId;
+  }
+
+  try {
+    let message = await Message.create(newMessage);
+
+    message = await message.populate([
+      { path: "sender", select: "firstName lastName image" },
+      { path: "chat" },
+      { path: "sharedPost", select: "title description imgPath postType" },
+    ]);
+
+    message = await Chat.populate(message, {
+      path: "chat.users",
+      select: "firstName lastName image email",
+    });
+
+    await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
+
+    // ✅ Emit via Socket.IO (real-time)
+    const io = global.io;
+    if (io && message.chat && message.chat.users) {
+      message.chat.users.forEach((user) => {
+        if (user._id.toString() !== req.user.id.toString()) {
+          io.to(user._id.toString()).emit("message recieved", message);
+        }
+      });
     }
 
-    const newMessage = {
-        sender: req.user.id,
-        content: content,
-        chat: chatId,
-    };
-
-    try {
-        let message = await Message.create(newMessage);
-
-        // Populate sender
-        message = await Message.populate(message, { path: "sender", select: "firstName lastName image" });
-
-        // Populate chat
-        message = await Message.populate(message, { path: "chat" });
-
-        // Populate chat users
-        message = await Chat.populate(message, { path: "chat.users", select: "firstName lastName image email" });
-
-        
-
-        await Chat.findByIdAndUpdate(req.body.chatId, {
-            latestMessage: message,
-        });
-
-        // const notification = new Notification({
-        //     recipient: message.users.find(u => u.toString() !== req.user._id.toString()),
-        //     sender: req.user._id,
-        //     type: 'chat',
-        //     chat: message._id,
-        //     message: `New message: ${content.substring(0, 30)}...`
-        //   });
-      
-        //   await notification.save();
-
-        return res.status(201).json({
-            success: true,
-            message: "Message created",
-            message
-        });
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-        });
-    }
+    return res.status(201).json({
+      success: true,
+      message: "Message created",
+      message,
+    });
+  } catch (error) {
+    console.error("sendMessage error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
 };
-
 
     exports.allMessages = async (req, res) => {
         try {
@@ -81,3 +83,47 @@ exports.sendMessage = async (req, res) => {
         }
      };
 
+exports.markMessageAsDelivered = async (req, res) => {
+  try {
+    const { messageId } = req.body;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ success: false, message: "Message not found" });
+
+    if (!message.deliveredTo.includes(userId)) {
+      message.deliveredTo.push(userId);
+      if (message.status !== "seen") {
+        message.status = "delivered";
+      }
+      await message.save();
+    }
+
+    return res.status(200).json({ success: true, message: "Message marked as delivered" });
+  } catch (err) {
+    console.error("Delivery update error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ✅ Mark message as seen
+exports.markMessageAsSeen = async (req, res) => {
+  try {
+    const { messageId } = req.body;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ success: false, message: "Message not found" });
+
+    if (!message.seenBy.includes(userId)) {
+      message.seenBy.push(userId);
+      message.status = "seen";
+      await message.save();
+    }
+
+    return res.status(200).json({ success: true, message: "Message marked as seen" });
+  } catch (err) {
+    console.error("Seen update error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};

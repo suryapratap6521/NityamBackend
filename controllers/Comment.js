@@ -1,94 +1,193 @@
-const Post = require("../models/Post");
-const User = require("../models/User");
-const Community=require('../models/Community');
-exports.createComment = async (req, res) => {
+const Post =require("../models/Post");
+exports.commentOnPost = async (req, res) => {
   try {
-    const { userId, postId, text } = req.body;
-
-    if (!userId || !postId || !text) {
-      return res.status(400).json({
-        success: false,
-        message: "User ID, Post ID, and text are required",
-      });
-    }
+    const { postId, text } = req.body;
+    const userId = req.user.id;
 
     const comment = {
       commentedBy: userId,
-      text: text,
-      commentedAt: new Date(),
-      replies: [],
-      likes: []
+      text,
     };
 
-    const updatedPost = await Post.findByIdAndUpdate(
+    const post = await Post.findByIdAndUpdate(
       postId,
       { $push: { comments: comment } },
       { new: true }
     ).populate({
-      path: 'comments.commentedBy',
-      select: 'firstName lastName email city state communityDetails image',
-      populate: { path: 'communityDetails' }
+      path: "comments.commentedBy",
+      select: "firstName lastName email city state communityDetails image",
+      populate: { path: "communityDetails", select: "communityName" },
     });
+    console.log("--postcomment",post.comments);
 
-    const userDetails = await User.findById(userId);
+    global.io.emit("comment added", { postId, comments: post.comments });
 
-    if (!userDetails || !userDetails.communityDetails) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not associated with any community or there are no posts to be shown",
-      });
+    res.status(200).json({ success: true, message: "Comment added", comments: post.comments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error in commentOnPost" });
+  }
+};
+
+// --------------------
+// Like / Unlike Comment
+// --------------------
+exports.likeComment = async (req, res) => {
+  try {
+    const { postId, commentId } = req.body;
+    const userId = req.user.id;
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
+
+    const index = comment.likes.indexOf(userId);
+
+    if (index === -1) {
+      comment.likes.push(userId);
+    } else {
+      comment.likes.splice(index, 1); // Toggle like
     }
 
-    const communityId = userDetails.communityDetails;
+    await post.save();
 
-    const communityDetails = await Community.findById(communityId)
-      .populate({
-        path: "posts",
-        populate: [
-          {
-            path: "postByUser",
-            select: "firstName lastName email city state community image",
-            populate: { path: "communityDetails" }
-          },
-          {
-            path: "like"
-          },
-          {
-            path: "comments",
-            populate: [
-              {
-                path: "commentedBy",
-                select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" }
-              },
-              
-              {
-                path: "replies",
-                populate: [
-                  {
-                    path: "repliedBy",
-                    select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" }
-                  },
-                  
-                ]
-              }
-            ]
-          }
-        ]
-      })
-      .exec();
-
-    const allPosts = communityDetails.posts;
-
-    res.json(allPosts);
-
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error in creating the comment",
+    // ✅ Full population including all reply levels
+    const updatedPost = await Post.findById(postId).populate({
+      path: "comments.commentedBy comments.replies.repliedBy comments.replies.replies.repliedBy",
+      select: "firstName lastName image"
     });
+
+    const updatedComments = updatedPost.comments;
+
+    // ✅ Emit socket event for live update
+    global.io.emit("comment liked", { postId, comments: updatedComments });
+
+    return res.status(200).json({
+      success: true,
+      message: "Comment like toggled",
+      comments: updatedComments,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+
+
+
+// --------------------
+// Add Reply (Nested)
+// --------------------
+  exports.replyToComment = async (req, res) => {
+    try {
+      const { postId, commentId, replyId, text } = req.body;
+      console.log(postId,commentId,replyId,text);
+      const userId = req.user.id;
+
+      const post = await Post.findById(postId).populate({
+        path: "comments.commentedBy comments.replies.repliedBy comments.replies.replies.repliedBy",
+        select: "firstName lastName image",
+      });
+
+      const comment = post.comments.id(commentId);
+      if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
+
+      let target = comment;
+      if (replyId) {
+        const findReply = (replies) => {
+          for (let r of replies) {
+            if (r._id.toString() === replyId) return r;
+            const nested = findReply(r.replies);
+            if (nested) return nested;
+          }
+          return null;
+        };
+        target = findReply(comment.replies);
+        if (!target) return res.status(404).json({ success: false, message: "Reply not found" });
+      }
+
+      target.replies.push({ repliedBy: userId, text });
+      await post.save();
+
+      const updatedPost = await Post.findById(postId)
+        .populate({
+          path: "comments.commentedBy comments.replies.repliedBy comments.replies.replies.repliedBy",
+          select: "firstName lastName image",
+        });
+
+      global.io.emit("comment updated", {
+        postId,
+        comments: updatedPost.comments,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Reply added",
+        comments: updatedPost.comments,
+      });
+    } catch (err) {
+      console.error("Error in replyToComment:", err);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  };
+
+
+// --------------------
+// Like / Unlike Reply (Recursive)
+// --------------------
+exports.likeReply = async (req, res) => {
+  try {
+    const { postId, commentId, replyId } = req.body;
+    const userId = req.user.id;
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
+
+    // Recursive reply finder
+    const findReply = (replies) => {
+      for (let r of replies) {
+        if (r._id.toString() === replyId) return r;
+        const nested = findReply(r.replies);
+        if (nested) return nested;
+      }
+      return null;
+    };
+
+    const reply = findReply(comment.replies);
+    if (!reply) return res.status(404).json({ success: false, message: "Reply not found" });
+
+    const index = reply.likes.indexOf(userId);
+    if (index === -1) reply.likes.push(userId);
+    else reply.likes.splice(index, 1); // Toggle
+
+    await post.save();
+
+    // 🔁 Refetch with full population like likeComment
+    const updatedPost = await Post.findById(postId).populate({
+      path: "comments.commentedBy comments.replies.repliedBy comments.replies.replies.repliedBy",
+      select: "firstName lastName image",
+    });
+
+    const updatedComments = updatedPost.comments;
+
+    // ✅ Emit socket update
+    global.io.emit("comment updated", { postId, comments: updatedComments });
+
+    return res.status(200).json({
+      success: true,
+      message: "Reply like toggled",
+      comments: updatedComments,
+    });
+
+  } catch (err) {
+    console.error("Error in likeReply:", err);
+    res.status(500).json({ success: false, message: "Server error in likeReply" });
   }
 };
 
@@ -96,394 +195,69 @@ exports.createComment = async (req, res) => {
 exports.deleteComment = async (req, res) => {
   try {
     const { postId, commentId } = req.body;
-
-    if (!postId || !commentId) {
-      return res.status(400).json({
-        success: false,
-        message: "Post ID and Comment ID are required",
-      });
-    }
-
-    const updatedPost = await Post.findByIdAndUpdate(
-      postId,
-      { $pull: { comments: { _id: commentId } } },
-      { new: true }
-    ).populate("comments.commentedBy");
-
-    const userDetails = await User.findById(userId);
-  
-    // Check if user details exist and if communityDetails is available
-    if (!userDetails || !userDetails.communityDetails) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not associated with any community or there are no posts to be shown",
-      });
-    }
-
-    const communityId = userDetails.communityDetails;
-
-    const communityDetails = await Community.findById(communityId)
-      .populate({
-        path: "posts",
-        populate: [
-          {
-            path: "postByUser",
-            select: "firstName lastName email city state community image",
-            populate: { path: "communityDetails" }
-          },
-          {
-            path: "like"
-          },
-          {
-            path: "comments",
-            populate: [
-              {
-                path: "commentedBy",
-                select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" }
-              },
-              
-              {
-                path: "replies",
-                populate: [
-                  {
-                    path: "repliedBy",
-                    select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" }
-                  },
-                  
-                ]
-              }
-            ]
-          }
-        ]
-      })
-      .exec();
-
-    const allPosts = communityDetails.posts;
-
-    res.json(allPosts);
-  
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error in deleting the comment",
-    });
-  }
-};
-
-
-exports.addReply = async (req, res) => {
-  const { postId, commentId, text } = req.body;
-  const userId = req.user.id;
-
-  try {
-    const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({ success: false, message: 'Post not found' });
-    }
-
-    const comment = post.comments.id(commentId);
-    if (!comment) {
-      return res.status(404).json({ success: false, message: 'Comment not found' });
-    }
-
-    comment.replies.push({
-      repliedBy: userId,
-      text: text,
-    });
-
-    await post.save();
-
-    const userDetails = await User.findById(userId);
-
-    if (!userDetails || !userDetails.communityDetails) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not associated with any community or there are no posts to be shown",
-      });
-    }
-
-    const communityId = userDetails.communityDetails;
-
-    const communityDetails = await Community.findById(communityId)
-      .populate({
-        path: "posts",
-        populate: [
-          {
-            path: "postByUser",
-            select: "firstName lastName email city state community image",
-            populate: { path: "communityDetails" }
-          },
-          {
-            path: "like"
-          },
-          {
-            path: "comments",
-            populate: [
-              {
-                path: "commentedBy",
-                select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" }
-              },
-             
-              {
-                path: "replies",
-                populate: [
-                  {
-                    path: "repliedBy",
-                    select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" }
-                  },
-                  
-                ]
-              }
-            ]
-          }
-        ]
-      })
-      .exec();
-
-    const allPosts = communityDetails.posts;
-
-    
-    res.status(200).json({
-      success: true,
-      message: 'Reply added successfully',
-      allPosts
-      
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
-
-
-
-exports.likeComment = async (req, res) => {
-  const { postId, commentId } = req.body;
-  const userId = req.user.id;
-
-  try {
-    const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({ success: false, message: 'Post not found' });
-    }
-
-    const comment = post.comments.id(commentId);
-    if (!comment) {
-      return res.status(404).json({ success: false, message: 'Comment not found' });
-    }
-
-    const index = comment.likes.indexOf(userId);
-    if (index === -1) {
-      comment.likes.push(userId);
-    } else {
-      comment.likes.splice(index, 1);
-    }
-
-    await post.save();
-    const userDetails = await User.findById(userId);
-
-    if (!userDetails || !userDetails.communityDetails) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not associated with any community or there are no posts to be shown",
-      });
-    }
-
-    const communityId = userDetails.communityDetails;
-
-    const communityDetails = await Community.findById(communityId)
-      .populate({
-        path: "posts",
-        populate: [
-          {
-            path: "postByUser",
-            select: "firstName lastName email city state community image",
-            populate: { path: "communityDetails" }
-          },
-          {
-            path: "like"
-          },
-          {
-            path: "comments",
-            populate: [
-              {
-                path: "commentedBy",
-                select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" }
-              },
-              
-              {
-                path: "replies",
-                populate: [
-                  {
-                    path: "repliedBy",
-                    select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" }
-                  },
-                  
-                ]
-              }
-            ]
-          }
-        ]
-      })
-      .exec();
-
-    const allPosts = communityDetails.posts;
-
-    
-    res.status(200).json({ success: true,
-       message: 'Comment liked/unliked successfully',
-      allPosts
-      });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
-
-exports.likeReply = async (req, res) => {
-  const { postId, commentId, replyId } = req.body;
-  const userId = req.user.id;
-
-  try {
-    const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({ success: false, message: 'Post not found' });
-    }
-
-    const comment = post.comments.id(commentId);
-    if (!comment) {
-      return res.status(404).json({ success: false, message: 'Comment not found' });
-    }
-
-    const reply = comment.replies.id(replyId);
-    if (!reply) {
-      return res.status(404).json({ success: false, message: 'Reply not found' });
-    }
-
-    const index = reply.likes.indexOf(userId);
-    if (index === -1) {
-      reply.likes.push(userId);
-    } else {
-      reply.likes.splice(index, 1);
-    }
-
-    await post.save();
-    const userDetails = await User.findById(userId);
-
-    if (!userDetails || !userDetails.communityDetails) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not associated with any community or there are no posts to be shown",
-      });
-    }
-
-    const communityId = userDetails.communityDetails;
-
-    const communityDetails = await Community.findById(communityId)
-      .populate({
-        path: "posts",
-        populate: [
-          {
-            path: "postByUser",
-            select: "firstName lastName email city state community image",
-            populate: { path: "communityDetails" }
-          },
-          {
-            path: "like"
-          },
-          {
-            path: "comments",
-            populate: [
-              {
-                path: "commentedBy",
-                select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" }
-              },
-              
-              {
-                path: "replies",
-                populate: [
-                  {
-                    path: "repliedBy",
-                    select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" }
-                  },
-                 
-                ]
-              }
-            ]
-          }
-        ]
-      })
-      .exec();
-
-    const allPosts = communityDetails.posts;
-
-    
-    res.status(200).json({ success: true, message: 'Reply liked/unliked successfully',
-      allPosts
-     });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
-
-
-exports.addNestedReply = async (req, res) => {
-  try {
-    const { postId, commentId, replyId, text } = req.body;
     const userId = req.user.id;
 
     const post = await Post.findById(postId);
-
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found" });
-    }
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
 
     const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
 
-    if (!comment) {
-      return res.status(404).json({ success: false, message: "Comment not found" });
+    if (comment.commentedBy.toString() !== userId.toString()) {
+      return res.status(403).json({ success: false, message: "Unauthorized to delete this comment" });
     }
 
-    let targetReply = comment;
-
-    if (replyId) {
-      const findReply = (replies, id) => {
-        for (let reply of replies) {
-          if (reply._id.equals(id)) return reply;
-          const nestedReply = findReply(reply.replies, id);
-          if (nestedReply) return nestedReply;
-        }
-        return null;
-      };
-
-      targetReply = findReply(comment.replies, replyId);
-
-      if (!targetReply) {
-        return res.status(404).json({ success: false, message: "Reply not found" });
-      }
-    }
-
-    const newReply = {
-      repliedBy: userId,
-      text,
-    };
-
-    targetReply.replies.push(newReply);
+    comment.remove();
     await post.save();
 
-    return res.status(200).json({ success: true, message: "Reply added successfully", post });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
+    global.io.emit("comment deleted", { postId, commentId });
+
+    res.status(200).json({ success: true, message: "Comment deleted" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error in deleteComment" });
+  }
+};
+
+
+exports.deleteReply = async (req, res) => {
+  try {
+    const { postId, commentId, replyId } = req.body;
+    const userId = req.user.id;
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
+
+    const deleteRecursive = (replies, replyId) => {
+      for (let i = 0; i < replies.length; i++) {
+        const reply = replies[i];
+        if (reply._id.toString() === replyId) {
+          if (reply.repliedBy.toString() !== userId.toString()) {
+            return { error: "Unauthorized" };
+          }
+          replies.splice(i, 1);
+          return { deleted: true };
+        }
+        const result = deleteRecursive(reply.replies, replyId);
+        if (result?.deleted || result?.error) return result;
+      }
+      return null;
+    };
+
+    const result = deleteRecursive(comment.replies, replyId);
+    if (!result) return res.status(404).json({ success: false, message: "Reply not found" });
+    if (result.error) return res.status(403).json({ success: false, message: result.error });
+
+    await post.save();
+
+    global.io.emit("reply deleted", { postId, commentId, replyId });
+
+    res.status(200).json({ success: true, message: "Reply deleted" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error in deleteReply" });
   }
 };

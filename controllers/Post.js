@@ -4,182 +4,158 @@ const Post = require("../models/Post");
 const User = require("../models/User");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
 const AdvertisedPost=require("../models/AdvertisedPost");
-const Notification = require('../models/Notification');  // Adjust the path if needed
+const Notification = require('../models/Notification');
 
+  // Adjust the path if needed
 // const NotificationController = require('../controllers/notificationController');
 require("dotenv").config();
 
-
-// exports.createPost = async (req, res) => {
-//   try {
-//       const { title,postType,eventName,location,startDate,EndDate,hostedBy,venue } = req.body;
-//       const userId = req.user.id;
-
-      
-
-//       if (!userId) {
-//           return res.status(404).json({
-//               success: false,
-//               message: "User is not registered",
-//           });
-//       }
-
-//      // Check if files are present
-//      const postFiles = req.files ? (Array.isArray(req.files.postFiles) ? req.files.postFiles : [req.files.postFiles]) : [];
-
-//      // If there are no files and no title, return an error
-//      if (postFiles.length === 0 && !title) {
-//          return res.status(400).json({
-//              success: false,
-//              message: "Either title or any image or video is required",
-//          });
-//      }
-
-//      // Upload files to Cloudinary if present
-//      let uploadDetails = [];
-//      if (postFiles.length > 0) {
-//          uploadDetails = await uploadFilesToCloudinary(postFiles, process.env.FOLDER_NAME);
-//      }
-
-//       // Create post with the uploaded file URLs
-//       const post = await Post.create({
-//           title: title || "Untitled",
-//           imgPath: uploadDetails.map(detail => detail.secure_url) || [],
-//           postByUser: userId,
-//       });
-
-//       await User.findByIdAndUpdate(userId, { $push: { postByUser: post._id } });
-
-//       const userDetails = await User.findById(userId).populate("postByUser");
-//       const communityDetails = await Community.findByIdAndUpdate(
-//           { _id: userDetails.communityDetails },
-//           { $push: { posts: post._id } },
-//           { new: true }
-//       ).populate("posts");
-
-//       return res.status(200).json({
-//           success: true,
-//           message: "Successfully created the post",
-//           data: post,
-//       });
-//   } catch (error) {
-//       console.error(error);
-//       return res.status(500).json({
-//           success: false,
-//           message: "Internal server error",
-//       });
-//   }
-// };
-
-
-// createPost controller for handling media files in both posts and events
-// controllers/Post.js
-
-console.log(Notification,"-------------asdasdas")
 exports.createPost = async (req, res) => {
   try {
-    const { postType, title, location, startDate, endDate, hostedBy,description, pollOptions } = req.body;
+    const {
+      postType,
+      title,
+      location,
+      startDate,
+      endDate,
+      hostedBy,
+      description,
+      pollOptions,
+    } = req.body;
     const userId = req.user.id;
-    console.log(req.body);
 
     if (!userId) {
-      return res.status(404).json({
+      return res.status(401).json({
         success: false,
-        message: "User is not registered",
+        message: "User is not authenticated.",
       });
     }
 
-    let postData = { postType, title: title || "", postByUser: userId };
+    // Basic post structure
+    let postData = {
+      postType,
+      title: title || "",
+      postByUser: userId,
+    };
 
-    if (postType === 'poll') {
+    // Poll post
+    if (postType === "poll") {
       if (!pollOptions || pollOptions.length < 2) {
-        return res.status(400).json({ error: 'At least two poll options are required.' });
+        return res.status(400).json({ error: "At least two poll options are required." });
       }
       postData.pollOptions = pollOptions.map(option => ({ option }));
-    } else if (postType === 'event') {
+    }
+
+    // Event post
+    else if (postType === "event") {
       if (!location || !startDate || !endDate || !hostedBy) {
-        return res.status(400).json({ error: 'Event details are required.' });
+        return res.status(400).json({ error: "Missing event details." });
       }
-      postData = { ...postData, location, startDate, endDate, hostedBy, description };
-      const eventFiles = req.files ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
+      postData = {
+        ...postData,
+        location,
+        startDate,
+        endDate,
+        hostedBy,
+        description,
+      };
+
+      const eventFiles = req.files?.media
+        ? Array.isArray(req.files.media)
+          ? req.files.media
+          : [req.files.media]
+        : [];
+
       if (eventFiles.length > 0) {
-        const uploadDetails = await uploadFilesToCloudinary(eventFiles, process.env.FOLDER_NAME);
-        postData.imgPath = uploadDetails.map(detail => detail.secure_url);
-      }
-    } else {
-      const postFiles = req.files ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
-      if (postFiles.length === 0 && !title) {
-        return res.status(400).json({
-          success: false,
-          message: "Either title or any image or video is required",
-        });
-      }
-      if (postFiles.length > 0) {
-        const uploadDetails = await uploadFilesToCloudinary(postFiles, process.env.FOLDER_NAME);
-        postData.imgPath = uploadDetails.map(detail => detail.secure_url);
+        const uploaded = await uploadFilesToCloudinary(eventFiles, process.env.FOLDER_NAME);
+        postData.imgPath = uploaded.map(f => f.secure_url);
       }
     }
 
+    // Normal post
+    else {
+      const postFiles = req.files?.media
+        ? Array.isArray(req.files.media)
+          ? req.files.media
+          : [req.files.media]
+        : [];
+
+      if (postFiles.length === 0 && !title) {
+        return res.status(400).json({
+          success: false,
+          message: "Title or media is required.",
+        });
+      }
+
+      if (postFiles.length > 0) {
+        const uploaded = await uploadFilesToCloudinary(postFiles, process.env.FOLDER_NAME);
+        postData.imgPath = uploaded.map(f => f.secure_url);
+      }
+    }
+
+    // Create post
     const post = await Post.create(postData);
-    const userDetails = await User.findByIdAndUpdate(userId, { $push: { postByUser: post._id } });
-    await Community.findByIdAndUpdate(
-      { _id: userDetails.communityDetails },
-      { $push: { posts: post._id } },
+
+    // Update user
+    const userDetails = await User.findByIdAndUpdate(
+      userId,
+      { $push: { postByUser: post._id } },
       { new: true }
-    ).populate("posts");
+    ).populate("communityDetails", "userInCommunity communityName image city community");
 
-    // const notificationMessage = `${userDetails.firstName} ${userDetails.lastName} created a new ${postType} in your community.`;
+    // Add post to community
+    await Community.findByIdAndUpdate(userDetails.communityDetails._id, {
+      $push: { posts: post._id },
+    });
 
-    // Send notification via socket to all users in the community
-   // Emit notification to community members
-// global.io.to(userDetails.communityDetails).emit("newNotification", {
-//   message: notificationMessage,
-//   postType,
-//   postId: post._id,
-// });
+    // Notify community members (except sender)
+    const members = userDetails.communityDetails.userInCommunity.filter(
+      m => m.toString() !== userId.toString()
+    );
 
-    // console.log("Notification emitted to room:", userDetails.communityDetails);
+    const notifications = members.map(member => ({
+      recipient: member,
+      sender: userId,
+      post: post._id,
+      type: postType,
+      message: `${userDetails.firstName} created a new ${postType}: "${title?.substring(0, 30) || ''}..."`,
+    }));
 
-// Add at top
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
 
+      global.io.to(members.map(m => m.toString())).emit("newNotification", {
+        sender: {
+          _id: userDetails._id,
+          firstName: userDetails.firstName,
+          lastName: userDetails.lastName,
+          image: userDetails.image,
+        },
+        post,
+        notifications,
+      });
+    }
 
-// Inside createPost function after community update:
-const community = await Community.findById(userDetails.communityDetails)
-  .select('userInCommunity')
-  .populate('userInCommunity')
-  .exec();
-
-const members = community.userInCommunity.filter(member => member._id.toString() !== userId.toString());
-
-const notifications = members.map(member => ({
-  recipient: member._id,
-  sender: userId,
-  post: post._id,
-  type: postType,
-  message: `${userDetails.firstName} created a new ${postType}: "${title.substring(0, 30)}..."`
-}));
-
-
-if (notifications.length > 0) {
-  await Notification.insertMany(notifications);
-
-  global.io.to(members.map(m => m._id.toString())).emit("newNotification", {
-    sender: userDetails,
-    post: post,
-    notifications,
-  });
-}
-
-
+    // ✅ Emit real-time newPost to all users (frontend listener updates feed)
+    global.io.emit("newPost", {
+      ...post._doc,
+      type: 0, // mark it as post (not ad)
+      postByUser: {
+        _id: userDetails._id,
+        firstName: userDetails.firstName,
+        lastName: userDetails.lastName,
+        image: userDetails.image,
+        communityDetails: userDetails.communityDetails,
+      },
+    });
 
     return res.status(200).json({
       success: true,
       message: "Successfully created the post",
       postData: post,
     });
-
   } catch (error) {
-    console.error('Error creating post:', error);
+    console.error("Error creating post:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -187,7 +163,28 @@ if (notifications.length > 0) {
   }
 };
 
-// Add these endpoints
+
+exports.getAllPosts = async (req, res) => {
+  try {
+    const allPost = await Post.find({}, { title: true })
+      .populate("postByUser")
+      .populate("likes")
+      // .populate('commentsOnPost')
+      .exec();
+
+    return res.status(200).json({
+      success: true,
+      posts: allPost,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
+
 exports.voteOnPoll = async (req, res) => {
   try {
     const { postId } = req.params;
@@ -228,18 +225,21 @@ exports.voteOnPoll = async (req, res) => {
 exports.getVoters = async (req, res) => {
   try {
     const { postId, optionIndex } = req.params;
-    
-    const post = await Post.findById(postId)
-      .populate({
-        path: `pollOptions.${optionIndex}.votes`,
-        select: 'firstName lastName image'
-      });
 
-    if (!post) return res.status(404).json({ error: 'Poll not found' });
+    const post = await Post.findById(postId).populate({
+      path: 'pollOptions.votes',
+      select: 'firstName lastName image'
+    });
+
+    if (!post) {
+      return res.status(404).json({ error: 'Poll not found' });
+    }
+
+    const voters = post.pollOptions[optionIndex]?.votes || [];
 
     res.status(200).json({
       success: true,
-      voters: post.pollOptions[optionIndex].votes
+      voters,
     });
 
   } catch (error) {
@@ -249,93 +249,90 @@ exports.getVoters = async (req, res) => {
 };
 
 
-exports.getAllPosts = async (req, res) => {
-  try {
-    const allPost = await Post.find({}, { title: true })
-      .populate("postByUser")
-      .populate("likes")
-      // .populate('commentsOnPost')
-      .exec();
-
-    return res.status(200).json({
-      success: true,
-      posts: allPost,
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-    });
-  }
-};
 exports.getCommunityPost = async (req, res) => {
   try {
-    // Get the user ID from the request
     const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    // Find user details by ID
     const userDetails = await User.findById(userId);
-
     if (!userDetails || !userDetails.communityDetails) {
       return res.status(401).json({
         success: false,
-        message: "User is not associated with any community or there are no posts to be shown",
+        message: "User is not associated with any community",
       });
     }
 
     const communityId = userDetails.communityDetails;
 
-    const communityDetails = await Community.findById(communityId)
-      .populate({
-        path: "posts",
-        options: { sort: { createdAt: -1 } }, // Sort by latest first
-        populate: [
-          {
-            path: "postByUser",
-            select: "firstName lastName email city state community image",
-            populate: { path: "communityDetails" }
-          },
-          { path: "like" },
-          {
-            path: "comments",
-            populate: [
-              {
-                path: "commentedBy",
-                select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" }
-              },
-              {
-                path: "replies",
-                populate: [
-                  {
-                    path: "repliedBy",
-                    select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" }
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      })
+    // Get total post count and paginated IDs
+    const community = await Community.findById(communityId).select("posts advertisedPosts");
+
+    const totalPosts = community.posts.length;
+    const totalPages = Math.ceil(totalPosts / limit);
+    const paginatedPostIds = community.posts
+      .slice()
+      .reverse() // newest first
+      .slice(skip, skip + limit); // apply pagination
+
+    const posts = await Post.find({ _id: { $in: paginatedPostIds } })
+      .populate([
+        {
+          path: "postByUser",
+          select: "firstName lastName email city state communityDetails image community",
+          populate: { path: "communityDetails", select: "communityName" }
+        },
+        {
+          path: "likes",
+          select: "firstName lastName email image"
+        },
+        {
+          path: "comments",
+          populate: [
+            {
+              path: "commentedBy",
+              select: "firstName lastName email city state communityDetails image",
+              populate: { path: "communityDetails", select: "communityName" }
+            },
+            {
+              path: "replies",
+              populate: [
+                {
+                  path: "repliedBy",
+                  select: "firstName lastName email city state communityDetails image",
+                  populate: { path: "communityDetails", select: "communityName" }
+                }
+              ]
+            }
+          ]
+        }
+      ])
+      .sort({ createdAt: -1 });
+
+    // Fetch advertised posts
+    const advertisedData = await Community.findById(communityId)
+      .select("advertisedPosts")
       .populate({
         path: "advertisedPosts",
-        options: { sort: { createdAt: -1 } }, // Sort by latest first
+        options: { sort: { createdAt: -1 } },
         populate: [
           {
             path: "createdBy",
             select: "firstName lastName email city state communityDetails image",
-            populate: { path: "communityDetails" }
+            populate: { path: "communityDetails", select: "communityName" }
           },
-          { path: "like", select: "firstName lastName email image" },
+          {
+            path: "like",
+            select: "firstName lastName email image"
+          },
           {
             path: "comments",
             populate: [
               {
                 path: "commentedBy",
                 select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails" }
+                populate: { path: "communityDetails", select: "communityName" }
               },
               {
                 path: "replies",
@@ -343,7 +340,7 @@ exports.getCommunityPost = async (req, res) => {
                   {
                     path: "repliedBy",
                     select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails" }
+                    populate: { path: "communityDetails", select: "communityName" }
                   }
                 ]
               }
@@ -352,27 +349,29 @@ exports.getCommunityPost = async (req, res) => {
           { path: "communities", select: "communityName" },
           { path: "pageId", select: "name description image" }
         ]
-      })
-      .exec();
-
-    // Extract sorted posts and advertised posts
-    const communityPost = communityDetails.posts;
-    const communityAdvertisedPosts = communityDetails.advertisedPosts;
+      });
 
     return res.status(200).json({
       success: true,
-      message: "Successfully retrieved all community posts",
-      communityPost,
-      communityAdvertisedPosts,
+      message: "Community posts fetched successfully",
+      posts: posts.map(p => ({ ...p._doc, type: 0 })),
+      advertisedPosts: advertisedData?.advertisedPosts.map(ad => ({ ...ad._doc, type: 1 })) || [],
+      pagination: {
+        currentPage: page,
+        totalPages,
+        hasMore: page < totalPages
+      }
     });
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching community posts:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error in retrieving community posts",
+      message: "Internal server error while fetching posts",
     });
   }
 };
+
+
 
 exports.getCommunityEvents = async (req, res) => {
   try {
@@ -412,78 +411,154 @@ exports.getCommunityEvents = async (req, res) => {
   }
 };
 
-
-
-
-
-
-//////////////////////////////////////////////////////////////////////////////
 exports.deletePost = async (req, res) => {
   try {
-    const { postId } = req.body; // Access postId from the request parameters
+    const { postId } = req.body;
     const userId = req.user.id;
 
-    console.log(userId,"-->user");
-    console.log(postId,"-->post");
-
     if (!postId || !userId) {
-      return res.status(404).json({
+      return res.status(400).json({
         success: false,
-        message: "Post or user ID is missing",
+        message: "Post ID and User ID are required.",
       });
     }
 
-    // Check if the post exists
-    const postDetails = await Post.findById(postId);
-    if (!postDetails) {
+    // Step 1: Fetch and validate the post
+    const post = await Post.findById(postId);
+    if (!post) {
       return res.status(404).json({
         success: false,
-        message: "Post not found",
+        message: "Post not found.",
       });
     }
 
-    // Check if the user is the creator of the post
-    const userDetails = await User.findById(userId);
-    if (!userDetails.postByUser.includes(postId)) {
+    // Step 2: Check ownership
+    const user = await User.findById(userId);
+    if (!user.postByUser.includes(postId)) {
       return res.status(403).json({
         success: false,
-        message: "You are not authorized to delete this post",
+        message: "Unauthorized to delete this post.",
       });
     }
 
-    // Remove the post from the user's postByUser array
-    userDetails.postByUser = userDetails.postByUser.filter(
-      (post) => post.toString() !== postId
-    );
-    await userDetails.save();
-    //remove the postId from community Posts
-    //remove the postId from community Posts
-    await Community.findByIdAndUpdate(userDetails.communityDetails, {
+    // Step 3: Remove post reference from user
+    user.postByUser = user.postByUser.filter(id => id.toString() !== postId);
+    await user.save();
+
+    // Step 4: Remove post from community
+    await Community.findByIdAndUpdate(user.communityDetails, {
       $pull: { posts: postId }
-    }).exec();
+    });
 
+    // Step 5: Delete associated notifications
+    await Notification.deleteMany({ post: postId });
 
-
-    // Delete the post
+    // Step 6: Delete the post (along with embedded comments/replies)
     await Post.findByIdAndDelete(postId);
+
+    // Step 7: Emit real-time update to community
+    global.io.to(user.communityDetails.toString()).emit("postDeleted", { postId });
 
     return res.status(200).json({
       success: true,
-      message: "Post deleted successfully",
+      message: "Post and all related data deleted successfully.",
     });
+
   } catch (error) {
-    console.error(error);
+    console.error("Error deleting post:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal Server error in deleting post",
+      message: "Internal server error while deleting post.",
+    });
+  }
+};
+
+
+exports.updatePost = async (req, res) => {
+  try {
+    console.log(req.body);
+    const { postId, title, description, location, startDate, endDate, hostedBy } = req.body;
+    const userId = req.user.id;
+
+    if (!postId || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Post ID and User ID are required.",
+      });
+    }
+
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found.",
+      });
+    }
+
+    if (post.postByUser.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized to update this post.",
+      });
+    }
+
+    // Update editable fields
+    if (title !== undefined) post.title = title;
+    if (description !== undefined) post.description = description;
+    if (post.postType === "event") {
+      if (location) post.location = location;
+      if (startDate) post.startDate = startDate;
+      if (endDate) post.endDate = endDate;
+      if (hostedBy) post.hostedBy = hostedBy;
+    }
+
+    // If media files are present (image/video), update them
+    const mediaFiles = req.files ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
+
+    if (mediaFiles.length > 0) {
+      const uploadDetails = await uploadFilesToCloudinary(mediaFiles, process.env.FOLDER_NAME);
+      post.imgPath = uploadDetails.map(file => file.secure_url);
+    }
+
+    await post.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Post updated successfully.",
+      updatedPost: post,
+    });
+
+  } catch (error) {
+    console.error("Error updating post:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while updating post.",
     });
   }
 };
 
 
 
+exports.getEventById = async (req, res) => {
+  try {
+    const { id } = req.params; // using route parameter
+    // Ensure that the post type is "event"
+    const event = await Post.findOne({ _id: id, postType: 'event' })
+      .populate('postByUser', 'firstName lastName email')
+      .exec();
 
-
+    if (!event) {
+      console.log("Event not found");
+      return res.status(404).json({ success: false, message: "Event not found" });
+    }
+    
+    return res.status(200).json({ success: true, event });
+  } catch (error) {
+    console.error("Error fetching event:", error);
+    return res.status(500).json({ success: false, message: "Server error", error });
+  }
+};
 
 exports.createAdv = async (req, res) => {
   try {
@@ -566,29 +641,5 @@ exports.createAdv = async (req, res) => {
   } catch (error) {
     console.error("Error adding post to communities:", error);
     res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-
-//getting the particualar event 
-
-// controllers/Post.js
-exports.getEventById = async (req, res) => {
-  try {
-    const { id } = req.params; // using route parameter
-    // Ensure that the post type is "event"
-    const event = await Post.findOne({ _id: id, postType: 'event' })
-      .populate('postByUser', 'firstName lastName email')
-      .exec();
-
-    if (!event) {
-      console.log("Event not found");
-      return res.status(404).json({ success: false, message: "Event not found" });
-    }
-    
-    return res.status(200).json({ success: true, event });
-  } catch (error) {
-    console.error("Error fetching event:", error);
-    return res.status(500).json({ success: false, message: "Server error", error });
   }
 };
