@@ -47,6 +47,16 @@ const userSchema = new mongoose.Schema({
   token: {
     type: String,
   },
+  
+  lastSeen: {
+  type: Date,
+  default: Date.now,
+},
+isOnline: {
+  type: Boolean,
+  default: false,
+},
+
   image: {
     type: String,
     required: true,

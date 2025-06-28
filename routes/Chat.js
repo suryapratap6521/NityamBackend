@@ -10,4 +10,5 @@ router.post("/groupchat",auth,createGroupChat);
 router.post("/rename",auth,renameGroup);
 router.post("/addtogroup",auth,addToGroup);
 router.post("/removefromgroup",auth,removeFromGroup);
+// router.post("/reset-unread", auth, resetUnreadCount);
 module.exports=router;

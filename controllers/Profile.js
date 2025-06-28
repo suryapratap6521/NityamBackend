@@ -128,3 +128,30 @@ exports.updateProfile = async (req, res) => {
     }
   }
   
+exports.lastSeen = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select("isOnline lastSeen");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const lastSeen = user.isOnline ? "Online" : user.lastSeen;
+
+    return res.status(200).json({
+      success: true,
+      lastSeen: lastSeen,
+      isOnline: user.isOnline,
+    });
+
+  } catch (error) {
+    console.error("Error fetching last seen:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};

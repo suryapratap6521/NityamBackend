@@ -866,32 +866,45 @@ exports.changePassword = async (req, res) => {
 
 // for searching of the users
 exports.searchUsers = async (req, res) => {
-    const userId = req.user.id;
-	console.log(userId);
-    try {
-        // Await the promise returned by User.findById
-        const userDetail = await User.findById(userId);
-        console.log(userDetail);
-        // console.log(userDetail);
-        const keyword = req.query.search ? {
-            $or: [
-                { firstName: { $regex: new RegExp(req.query.search, 'i') } },
-                { lastName: { $regex: new RegExp(req.query.search, 'i') } },
-                { email: { $regex: new RegExp(req.query.search, 'i') } },
-                { community: { $regex: new RegExp(req.query.search, 'i') } },
-            ]
-        } : {};
+	const userId = req.user.id;
+	const searchTerm = req.query.search || "";
+  
+	try {
+	  const userDetail = await User.findById(userId).select("communityDetails");
+	  if (!userDetail) return res.status(404).send("User not found");
+  
+	  const searchRegex = new RegExp(searchTerm, "i");
+	  const query = {
+		_id: { $ne: userId },
+		communityDetails: userDetail.communityDetails,
+		$or: [
+		  { firstName: searchRegex },
+		  { lastName: searchRegex },
+		  { email: searchRegex },
+		  { community: searchRegex },
+		],
+	  };
+  
+	  const users = await User.find(query)
+		.populate("communityDetails","communityName")
+		.select("firstName lastName email image") // return only needed fields
+		.limit(10); // add limit for performance
+  
+	  res.status(200).json(users);
+	} catch (error) {
+	  console.error("Search error:", error);
+	  res.status(500).send("Server Error in searching the community");
+	}
+  };
+// exports.getUserDetails = async (req, res) => {
+// 	const userId = req.user.id;
+  
+// 	try {
+// 	  const userDetails = await User.findById(userId)
+// 		.populate("communityDetails", "communityName")
+// 		.populate("additional
+// Details", "
 
-        // Check if userDetail is populated properly
-        console.log(userDetail.communityDetails); 
-        
-        const users = await User.find({ $and: [keyword, { _id: { $ne: req.user.id } },{communityDetails:userDetail.communityDetails}] }).populate("communityDetails");
-        res.send(users);
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Server Error in searching the community");
-    }
-};
 
 
 
