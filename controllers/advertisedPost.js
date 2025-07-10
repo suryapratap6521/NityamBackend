@@ -1,11 +1,11 @@
-const AdvertisedPost = require("../models/AdvertisedPost");
+
 const Community = require("../models/Community");
 const Page = require("../models/Page");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
 const Transaction = require("../models/Transaction");
-
+const AdvertisedPost= require("../models/AdvertisedPost");
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY,
   key_secret: process.env.RAZORPAY_SECRET,
@@ -17,6 +17,7 @@ exports.createAdvertisedPost = async (req, res) => {
   const parseNestedFields = (body) => {
     return {
       title: body.title,
+      description:body.description,
       pageId: body.pageId,
       price: Number(body.price),
       ageGroup: {
@@ -53,9 +54,10 @@ exports.createAdvertisedPost = async (req, res) => {
   };
 
 
+
   try {
     const parsedBody = parseNestedFields(req.body);
-    //console.log("Parsed Body:", parsedBody);
+    console.log("Parsed Body:", parsedBody);
 
     // Validate ageGroup
     if (
@@ -328,79 +330,87 @@ exports.likeAdvertisedPost = async (req, res) => {
     const userId = req.user.id;
 
     const post = await AdvertisedPost.findById(postId);
-
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found." });
-    }
+    if (!post) return res.status(404).json({ success: false, message: "Post not found." });
 
     if (post.like.includes(userId)) {
-      post.like = post.like.filter((id) => id.toString() !== userId);
+      post.like = post.like.filter(id => id.toString() !== userId);
     } else {
       post.like.push(userId);
     }
 
     await post.save();
-    res.status(200).json({ success: true, message: "Like status updated.", post });
+
+    const populatedPost = await AdvertisedPost.findById(post._id)
+      .populate("createdBy")
+      .populate("like")
+      .populate("pageId")
+      .populate("communities")
+      .populate("comments.commentedBy")
+      .populate("comments.replies.repliedBy");
+
+    res.status(200).json({ success: true, message: "Like status updated.", post: populatedPost });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error liking the post.", error: error.message });
+    res.status(500).json({ success: false, message: "Error liking post.", error: error.message });
   }
 };
+
 
 // Add Comment to Advertised Post
 exports.addComment = async (req, res) => {
   try {
-    const { postId } = req.body;
-    const { text } = req.body;
+    const { postId, text } = req.body;
     const userId = req.user.id;
 
     const post = await AdvertisedPost.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found." });
 
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found." });
-    }
-
-    post.comments.push({
-      commentedBy: userId,
-      text,
-    });
-
+    post.comments.push({ commentedBy: userId, text });
     await post.save();
-    res.status(201).json({ success: true, message: "Comment added successfully.", post });
+
+    const populatedPost = await AdvertisedPost.findById(post._id)
+      .populate("createdBy")
+      .populate("pageId")
+      .populate("like")
+      .populate("communities")
+      .populate("comments.commentedBy")
+      .populate("comments.replies.repliedBy");
+
+    res.status(201).json({ success: true, message: "Comment added successfully.", post: populatedPost });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error adding comment.", error: error.message });
   }
 };
 
+
 // Reply to a Comment
 exports.replyToComment = async (req, res) => {
   try {
-    const { postId, commentId } = req.body;
-    const { text } = req.body;
+    const { postId, commentId, text } = req.body;
     const userId = req.user.id;
 
     const post = await AdvertisedPost.findById(postId);
-
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found." });
-    }
+    if (!post) return res.status(404).json({ success: false, message: "Post not found." });
 
     const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found." });
 
-    if (!comment) {
-      return res.status(404).json({ success: false, message: "Comment not found." });
-    }
-
-    comment.replies.push({
-      repliedBy: userId,
-      text,
-    });
-
+    comment.replies.push({ repliedBy: userId, text });
     await post.save();
-    res.status(201).json({ success: true, message: "Reply added successfully.", post });
+
+    const populatedPost = await AdvertisedPost.findById(post._id)
+      .populate("createdBy")
+      .populate("pageId")
+      .populate("like")
+      .populate("communities")
+      .populate("comments.commentedBy")
+      .populate("comments.replies.repliedBy");
+
+    res.status(201).json({ success: true, message: "Reply added successfully.", post: populatedPost });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error replying to comment.", error: error.message });
   }
 };
+
 
 
 
@@ -489,33 +499,36 @@ exports.likeCommentOrReply = async (req, res) => {
     const userId = req.user.id;
 
     const post = await AdvertisedPost.findById(postId);
-
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found." });
-    }
+    if (!post) return res.status(404).json({ success: false, message: "Post not found." });
 
     const comment = post.comments.id(commentId);
-
-    if (!comment) {
-      return res.status(404).json({ success: false, message: "Comment not found." });
-    }
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found." });
 
     let target = comment;
+
     if (replyId) {
-      target = comment.replies.id(replyId);
-      if (!target) {
-        return res.status(404).json({ success: false, message: "Reply not found." });
-      }
+      const reply = comment.replies.id(replyId);
+      if (!reply) return res.status(404).json({ success: false, message: "Reply not found." });
+      target = reply;
     }
 
     if (target.likes.includes(userId)) {
-      target.likes = target.likes.filter((id) => id.toString() !== userId);
+      target.likes = target.likes.filter(id => id.toString() !== userId);
     } else {
       target.likes.push(userId);
     }
 
     await post.save();
-    res.status(200).json({ success: true, message: "Like status updated.", post });
+
+    const populatedPost = await AdvertisedPost.findById(post._id)
+      .populate("createdBy")
+      .populate("pageId")
+      .populate("like")
+      .populate("communities")
+      .populate("comments.commentedBy")
+      .populate("comments.replies.repliedBy");
+
+    res.status(200).json({ success: true, message: "Like status updated.", post: populatedPost });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error updating like.", error: error.message });
   }
@@ -528,36 +541,30 @@ exports.addNestedReply = async (req, res) => {
     const userId = req.user.id;
 
     const post = await AdvertisedPost.findById(postId);
-
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found." });
-    }
+    if (!post) return res.status(404).json({ success: false, message: "Post not found." });
 
     const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found." });
 
-    if (!comment) {
-      return res.status(404).json({ success: false, message: "Comment not found." });
-    }
+    const targetReply = comment.replies.id(replyId);
+    if (!targetReply) return res.status(404).json({ success: false, message: "Reply not found." });
 
-    let target = comment;
-    if (replyId) {
-      target = comment.replies.id(replyId);
-      if (!target) {
-        return res.status(404).json({ success: false, message: "Reply not found." });
-      }
-    }
-
-    target.replies.push({
-      repliedBy: userId,
-      text,
-    });
-
+    targetReply.replies.push({ repliedBy: userId, text });
     await post.save();
-    res.status(201).json({ success: true, message: "Reply added successfully.", post });
+
+    const populatedPost = await AdvertisedPost.findById(post._id)
+      .populate("createdBy")
+      .populate("pageId")
+      .populate("communities")
+      .populate("comments.commentedBy")
+      .populate("comments.replies.repliedBy");
+
+    res.status(201).json({ success: true, message: "Nested reply added successfully.", post: populatedPost });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error adding reply.", error: error.message });
+    res.status(500).json({ success: false, message: "Error adding nested reply.", error: error.message });
   }
 };
+
 
 exports.getCommunities = async (req, res) => {
   try {

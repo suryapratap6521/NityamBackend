@@ -1,57 +1,67 @@
 const Chat = require("../models/Chat");
 
 exports.accessChat = async (req, res) => {
-    const { userId } = req.body;
-    
-    if (!userId) {
-        return res.status(400).json({
-            success: false,
-            json: "UserId param not sent with request",
-        });
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      message: "UserId param not sent with request",
+    });
+  }
+
+  try {
+    const existingChat = await Chat.findOne({
+      isGroupChat: false,
+      users: { $all: [req.user.id, userId] }
+    })
+    .populate("users", "-password")
+    .populate({
+      path: "latestMessage",
+      populate: {
+        path: "sender",
+        select: "-password",
+      },
+    });
+
+    if (existingChat) {
+      return res.status(200).json({
+        success: true,
+        message: "Existing chat fetched",
+        chat: existingChat,
+      });
     }
 
-    try {
-        const isChat = await Chat.find({
-            isGroupChat: false,
-            $and: [
-                { users: { $elemMatch: { $eq: req.user.id } } },
-                { users: { $elemMatch: { $eq: userId } } }
-            ]
-        })
-        .populate("users", "-password")
-        .populate({
-            path: "latestMessage",
-            populate: {
-                path: "sender",
-                select: "-password",
-            }
-        });
+    const chatData = {
+      chatName: "sender",
+      isGroupChat: false,
+      users: [req.user.id, userId],
+    };
 
-        if (isChat.length > 0) {
-            return res.send(isChat[0]);
-        } else {
-            const chatData = {
-                chatName: "sender",
-                isGroupChat: false,
-                users: [req.user.id, userId],
-            };
-            
-            const createdChat = await Chat.create(chatData);
-            const fullChat = await Chat.findOne({ _id: createdChat._id }).populate("users", "-password");
+    const createdChat = await Chat.create(chatData);
 
-            return res.status(201).json({
-                success: true,
-                json: "Chat created successfully",
-                chat: fullChat,
-            });
-        }
-    } catch (error) {
-        console.error("Error accessing or creating chat:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Server error in accessing or creating the chat",
-        });
-    }
+    const fullChat = await Chat.findById(createdChat._id)
+      .populate("users", "-password")
+      .populate({
+        path: "latestMessage",
+        populate: {
+          path: "sender",
+          select: "-password",
+        },
+      });
+
+    return res.status(201).json({
+      success: true,
+      message: "Chat created successfully",
+      chat: fullChat,
+    });
+  } catch (error) {
+    console.error("Error accessing/creating chat:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error in accessing or creating the chat",
+    });
+  }
 };
 
 

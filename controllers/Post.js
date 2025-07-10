@@ -256,7 +256,13 @@ exports.getCommunityPost = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const userDetails = await User.findById(userId);
+    // Get user and community info
+    const userDetails = await User.findById(userId)
+      .populate({
+        path: "additionalDetails",
+        select: "dateOfBirth",
+      });
+
     if (!userDetails || !userDetails.communityDetails) {
       return res.status(401).json({
         success: false,
@@ -266,53 +272,9 @@ exports.getCommunityPost = async (req, res) => {
 
     const communityId = userDetails.communityDetails;
 
-    // Get total post count and paginated IDs
-    const community = await Community.findById(communityId).select("posts advertisedPosts");
-
-    const totalPosts = community.posts.length;
-    const totalPages = Math.ceil(totalPosts / limit);
-    const paginatedPostIds = community.posts
-      .slice()
-      .reverse() // newest first
-      .slice(skip, skip + limit); // apply pagination
-
-    const posts = await Post.find({ _id: { $in: paginatedPostIds } })
-      .populate([
-        {
-          path: "postByUser",
-          select: "firstName lastName email city state communityDetails image community",
-          populate: { path: "communityDetails", select: "communityName" }
-        },
-        {
-          path: "likes",
-          select: "firstName lastName email image"
-        },
-        {
-          path: "comments",
-          populate: [
-            {
-              path: "commentedBy",
-              select: "firstName lastName email city state communityDetails image",
-              populate: { path: "communityDetails", select: "communityName" }
-            },
-            {
-              path: "replies",
-              populate: [
-                {
-                  path: "repliedBy",
-                  select: "firstName lastName email city state communityDetails image",
-                  populate: { path: "communityDetails", select: "communityName" }
-                }
-              ]
-            }
-          ]
-        }
-      ])
-      .sort({ createdAt: -1 });
-
-    // Fetch advertised posts
-    const advertisedData = await Community.findById(communityId)
-      .select("advertisedPosts")
+    // Fetch community with advertised posts populated
+    const community = await Community.findById(communityId)
+      .select("posts advertisedPosts")
       .populate({
         path: "advertisedPosts",
         options: { sort: { createdAt: -1 } },
@@ -320,19 +282,16 @@ exports.getCommunityPost = async (req, res) => {
           {
             path: "createdBy",
             select: "firstName lastName email city state communityDetails image",
-            populate: { path: "communityDetails", select: "communityName" }
+            populate: { path: "communityDetails", select: "communityName" },
           },
-          {
-            path: "like",
-            select: "firstName lastName email image"
-          },
+          { path: "like" },
           {
             path: "comments",
             populate: [
               {
                 path: "commentedBy",
                 select: "firstName lastName email city state communityDetails image",
-                populate: { path: "communityDetails", select: "communityName" }
+                populate: { path: "communityDetails", select: "communityName" },
               },
               {
                 path: "replies",
@@ -340,27 +299,124 @@ exports.getCommunityPost = async (req, res) => {
                   {
                     path: "repliedBy",
                     select: "firstName lastName email city state communityDetails image",
-                    populate: { path: "communityDetails", select: "communityName" }
-                  }
-                ]
-              }
-            ]
+                    populate: { path: "communityDetails", select: "communityName" },
+                  },
+                ],
+              },
+            ],
           },
           { path: "communities", select: "communityName" },
-          { path: "pageId", select: "name description image" }
-        ]
+          { path: "pageId" },
+        ],
       });
 
+    const totalPosts = community.posts.length;
+    const totalPages = Math.ceil(totalPosts / limit);
+    const paginatedPostIds = community.posts
+      .slice()
+      .reverse()
+      .slice(skip, skip + limit);
+
+    // Fetch paginated normal posts
+    const posts = await Post.find({ _id: { $in: paginatedPostIds } })
+      .populate([
+        {
+          path: "postByUser",
+          select: "firstName lastName email city state communityDetails image community",
+          populate: { path: "communityDetails", select: "communityName" },
+        },
+        {
+          path: "likes",
+          select: "firstName lastName email image",
+        },
+        {
+          path: "comments",
+          populate: [
+            {
+              path: "commentedBy",
+              select: "firstName lastName email city state communityDetails image",
+              populate: { path: "communityDetails", select: "communityName" },
+            },
+            {
+              path: "replies",
+              populate: [
+                {
+                  path: "repliedBy",
+                  select: "firstName lastName email city state communityDetails image",
+                  populate: { path: "communityDetails", select: "communityName" },
+                },
+              ],
+            },
+          ],
+        },
+      ])
+      .sort({ createdAt: -1 });
+
+    // Handle empty posts
+    if (!posts || posts.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No posts found",
+        feed: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 0,
+          hasMore: false,
+        },
+      });
+    }
+
+    // 🔢 Calculate user's age
+    const currentDate = new Date();
+    const userDOB = new Date(userDetails.additionalDetails?.dateOfBirth);
+    const ageInMs = currentDate - userDOB;
+    const userAge = Math.floor(ageInMs / (1000 * 60 * 60 * 24 * 365.25));
+
+    // 🔎 Filter advertised posts by dateSlot and ageGroup
+    const filteredAds = (community.advertisedPosts || [])
+      .filter((ad) => {
+        const start = new Date(ad.dateSlot?.startDate);
+        const end = new Date(ad.dateSlot?.endDate);
+        const minAge = ad.ageGroup?.minAge || 0;
+        const maxAge = ad.ageGroup?.maxAge || 150;
+
+        return (
+          currentDate >= start &&
+          currentDate <= end &&
+          userAge >= minAge &&
+          userAge <= maxAge
+        );
+      })
+      .map((ad) => ({ ...ad._doc, type: 1 }));
+
+    // Format normal posts
+    const normalPosts = posts.map((p) => ({ ...p._doc, type: 0 }));
+
+    // 🧩 Interleave ads every 4 posts
+    const combinedFeed = [];
+    const AD_INTERVAL = 4;
+    let postIndex = 0;
+    let adIndex = 0;
+
+    while (postIndex < normalPosts.length) {
+      for (let i = 0; i < AD_INTERVAL && postIndex < normalPosts.length; i++) {
+        combinedFeed.push(normalPosts[postIndex++]);
+      }
+      if (adIndex < filteredAds.length) {
+        combinedFeed.push(filteredAds[adIndex++]);
+      }
+    }
+
+    // 📤 Send response
     return res.status(200).json({
       success: true,
       message: "Community posts fetched successfully",
-      posts: posts.map(p => ({ ...p._doc, type: 0 })),
-      advertisedPosts: advertisedData?.advertisedPosts.map(ad => ({ ...ad._doc, type: 1 })) || [],
+      feed: combinedFeed,
       pagination: {
         currentPage: page,
         totalPages,
-        hasMore: page < totalPages
-      }
+        hasMore: page < totalPages,
+      },
     });
   } catch (error) {
     console.error("Error fetching community posts:", error);
@@ -370,6 +426,8 @@ exports.getCommunityPost = async (req, res) => {
     });
   }
 };
+
+
 
 
 
