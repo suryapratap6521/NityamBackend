@@ -19,6 +19,11 @@ const transactionSchema = new mongoose.Schema({
         type: String,
 
     },
+   postPayload: {
+    type: Object, // ✅ Fixed: Accepts raw JS object
+    required: true,
+  },
+communities: [{ type: mongoose.Schema.Types.ObjectId, ref: "Community" }],
 
 }, { timestamps: true });
 

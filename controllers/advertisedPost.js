@@ -12,163 +12,117 @@ const razorpay = new Razorpay({
 });
 
 
-// Create Advertised Post
+
+// Parse & normalize nested frontend fields
+const parseNestedFields = (body) => ({
+  title: body.title,
+  description: body.description,
+  pageId: body.pageId,
+  price: Number(body.price),
+  ageGroup: {
+    minAge: Number(body["ageGroup[minAge]"]),
+    maxAge: Number(body["ageGroup[maxAge]"]),
+  },
+  dateSlot: {
+    startDate: new Date(body["dateSlot[startDate]"]),
+    endDate: new Date(body["dateSlot[endDate]"]),
+  },
+  optionType: body.optionType,
+  states: typeof body.states === "string" ? JSON.parse(body.states) : body.states || [],
+  cities: typeof body.cities === "string" ? JSON.parse(body.cities) : body.cities || [],
+  communities: Array.isArray(body.communities) ? body.communities : [body.communities],
+  buttonLabel: {
+    type: body["buttonLabel[type]"],
+    value: body["buttonLabel[value]"],
+  },
+  premium: body.premium === "true",
+});
+
+// ✔️ Razorpay + store payload + image upload
 exports.createAdvertisedPost = async (req, res) => {
-  const parseNestedFields = (body) => {
-    return {
-      title: body.title,
-      description:body.description,
-      pageId: body.pageId,
-      price: Number(body.price),
-      ageGroup: {
-        minAge: Number(body["ageGroup[minAge]"]),
-        maxAge: Number(body["ageGroup[maxAge]"]),
-      },
-      dateSlot: {
-        startDate: new Date(body["dateSlot[startDate]"]),
-        endDate: new Date(body["dateSlot[endDate]"]),
-      },
-      optionType: body.optionType,
-      states: body.states
-        ? typeof body.states === "string"
-          ? JSON.parse(body.states)
-          : body.states
-        : [],
-      cities: body.cities
-        ? typeof body.cities === "string"
-          ? JSON.parse(body.cities)
-          : body.cities
-        : [],
-      communities:
-        Array.isArray(body.communities)
-          ? body.communities
-          : body.communities
-            ? [body.communities]
-            : [],
-      buttonLabel: {
-        type: body["buttonLabel[type]"],
-        value: body["buttonLabel[value]"],
-      },
-      premium: body.premium === "true",
-    };
-  };
-
-
-
   try {
     const parsedBody = parseNestedFields(req.body);
-    console.log("Parsed Body:", parsedBody);
+    console.log("Parsed Body", parsedBody);
 
-    // Validate ageGroup
+    // Validate inputs
     if (
-      !parsedBody.ageGroup ||
-      parsedBody.ageGroup.minAge == null ||
-      parsedBody.ageGroup.maxAge == null
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Invalid ageGroup. Both minAge and maxAge are required." });
-    }
-
-    if (
-      parsedBody.ageGroup.minAge < 5 ||
-      parsedBody.ageGroup.maxAge > 90 ||
+      !parsedBody.ageGroup.minAge || !parsedBody.ageGroup.maxAge ||
+      parsedBody.ageGroup.minAge < 5 || parsedBody.ageGroup.maxAge > 90 ||
       parsedBody.ageGroup.minAge >= parsedBody.ageGroup.maxAge
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Invalid ageGroup. Ensure valid age range." });
-    }
+    ) return res.status(400).json({ message: "Invalid age range." });
 
-    // Validate dateSlot
     if (
-      !parsedBody.dateSlot ||
-      !parsedBody.dateSlot.startDate ||
-      !parsedBody.dateSlot.endDate
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Invalid dateSlot. Both startDate and endDate are required." });
-    }
+      !parsedBody.dateSlot.startDate || !parsedBody.dateSlot.endDate ||
+      parsedBody.dateSlot.startDate >= parsedBody.dateSlot.endDate
+    ) return res.status(400).json({ message: "Invalid date slot." });
 
-    const { startDate, endDate } = parsedBody.dateSlot;
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate >= endDate) {
-      return res
-        .status(400)
-        .json({ message: "Invalid date format in dateSlot." });
-    }
+    if (!parsedBody.buttonLabel?.type || !parsedBody.buttonLabel?.value)
+      return res.status(400).json({ message: "Invalid button label." });
 
-    // Validate buttonLabel
-    if (
-      !parsedBody.buttonLabel ||
-      !parsedBody.buttonLabel.type ||
-      !parsedBody.buttonLabel.value
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Invalid buttonLabel. Both type and value are required." });
-    }
-
-    // Fetch communities based on optionType
+    // Community targeting
     let selectedCommunities = [];
     switch (parsedBody.optionType) {
       case "allUsers":
         selectedCommunities = await Community.find({});
         break;
       case "byState":
-        if (!parsedBody.states.length) {
-          return res.status(400).json({ message: "States are required for this option." });
-        }
+        if (!parsedBody.states.length) return res.status(400).json({ message: "States required." });
         selectedCommunities = await Community.aggregate([
           {
             $lookup: {
               from: "users",
               localField: "userInCommunity",
               foreignField: "_id",
-              as: "userDetails",
-            },
+              as: "userDetails"
+            }
           },
-          { $match: { "userDetails.state": { $in: parsedBody.states } } },
+          {
+            $match: {
+              "userDetails.state": { $in: parsedBody.states }
+            }
+          }
         ]);
         break;
       case "byCity":
-        if (!parsedBody.cities.length) {
-          return res.status(400).json({ message: "Cities are required for this option." });
-        }
+        if (!parsedBody.cities.length) return res.status(400).json({ message: "Cities required." });
         selectedCommunities = await Community.aggregate([
           {
             $lookup: {
               from: "users",
               localField: "userInCommunity",
               foreignField: "_id",
-              as: "userDetails",
-            },
+              as: "userDetails"
+            }
           },
-          { $match: { "userDetails.city": { $in: parsedBody.cities } } },
+          {
+            $match: {
+              "userDetails.city": { $in: parsedBody.cities }
+            }
+          }
         ]);
         break;
       case "byCommunity":
-        if (!parsedBody.communities.length) {
-          return res
-            .status(400)
-            .json({ message: "Communities are required for this option." });
-        }
+        if (!parsedBody.communities.length) return res.status(400).json({ message: "Communities required." });
         selectedCommunities = await Community.find({
-          communityName: { $in: parsedBody.communities },
+          communityName: { $in: parsedBody.communities }
         });
         break;
       default:
         return res.status(400).json({ message: "Invalid option type." });
     }
 
-    //console.log("Selected Communities:", selectedCommunities);
     if (!selectedCommunities.length) {
-      return res
-        .status(404)
-        .json({ message: "No communities found for the selected criteria." });
+      return res.status(404).json({ message: "No matching communities found." });
     }
+    console.log(req.files,"---->req.files")
+    // ✔️ Upload images if provided
+    const uploadedImages = req.files?.imagesArray
+      ? await uploadFilesToCloudinary(req.files.imagesArray, "ads")
+      : [];
+    parsedBody.imagesArray = uploadedImages.map(img => img.secure_url);
+    console.log("Uploaded Images", parsedBody.imagesArray);
 
-    // Create Razorpay order
+    // ✔️ Create Razorpay Order
     const options = {
       amount: parsedBody.price * 100,
       currency: "INR",
@@ -176,141 +130,92 @@ exports.createAdvertisedPost = async (req, res) => {
       payment_capture: 1,
     };
     const order = await razorpay.orders.create(options);
-    console.log("orderrrrrrrrr", order)
-    // Create the Advertised Post
-    const newPost = new AdvertisedPost({
-      title: parsedBody.title,
-      pageId: parsedBody.pageId,
-      dateSlot: { startDate, endDate },
-      ageGroup: parsedBody.ageGroup,
-      communities: selectedCommunities.map((c) => c._id),
-      createdBy: req.user.id,
-      buttonLabel: parsedBody.buttonLabel,
-      premium: parsedBody.premium, // New field for premium
-      orderId: order.id
-    });
 
-    const newTransaction = new Transaction({
+    // ✔️ Store transaction & payload
+    const transaction = new Transaction({
       amount: parsedBody.price,
       userId: req.user.id,
       orderId: order.id,
-      status: 'created'
-    })
-
-    // Safely handle file uploads if any
-    //console.log("req.files:", req.files);
-    if (req.files) {
-      //console.log("req.files.imagesArray:", req.files.imagesArray);
-    }
-    const files =
-      req.files && req.files.imagesArray
-        ? Array.isArray(req.files.imagesArray)
-          ? req.files.imagesArray
-          : [req.files.imagesArray]
-        : [];
-
-    if (files.length > 0) {
-      const uploadDetails = await uploadFilesToCloudinary(
-        files,
-        process.env.FOLDER_NAME
-      );
-      newPost.imagesArray = uploadDetails.map((file) => file.secure_url);
-    }
-
-    await newPost.save();
-    await newTransaction.save();
-    await Page.findByIdAndUpdate(parsedBody.pageId, {
-      $push: { advertisedPosts: newPost._id },
+      status: "created",
+      postPayload: parsedBody,
+      communities: selectedCommunities.map(c => c._id),
     });
 
-    const populatedPost = await AdvertisedPost.findById(newPost._id).populate("communities");
+    await transaction.save();
 
-    await Promise.all(
-      selectedCommunities.map(async (community) => {
-        await Community.updateOne(
-          { _id: community._id },
-          { $addToSet: { advertisedPosts: newPost._id } }
-        );
-      })
-    );
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: "Advertised post created successfully.",
-      post: populatedPost,
+      message: "Payment order created.",
       orderId: order.id,
-      currency: order.currency,
       amount: order.amount,
+      currency: order.currency,
     });
-  } catch (error) {
-    console.log(error);
-    res
-      .status(500)
-      .json({ success: false, message: "Error creating advertised post.", error });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: "Internal error", error: err.message });
   }
 };
-
 exports.verifyPayment = async (req, res) => {
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, postData } = req.body;
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
   try {
-    // console.log("key", process.env.RAZORPAY_SECRET)
-    // console.log("ORDER_ID:", razorpay_order_id);
-    // console.log("PAYMENT_ID:", razorpay_payment_id);
-    // console.log("SIGNATURE_FROM_RAZORPAY:", razorpay_signature);
-    // console.log("SECRET:", process.env.RAZORPAY_SECRET);
     const generatedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    console.log(razorpay_signature, generatedSignature)
-
     if (generatedSignature !== razorpay_signature) {
-      return res.status(400).json({ success: false, message: "Payment verification failed." });
+      return res.status(400).json({ success: false, message: "Invalid payment signature." });
     }
 
-    // ✅ Update transaction status to "successful"
-    const updatedTransaction = await Transaction.findOneAndUpdate(
-      { orderId: razorpay_order_id },
-      { status: 'successful' },
-      { new: true }
-    );
+    const transaction = await Transaction.findOne({ orderId: razorpay_order_id });
+    if (!transaction) return res.status(404).json({ success: false, message: "Transaction not found." });
 
-    if (!updatedTransaction) {
-      return res.status(404).json({ success: false, message: "Transaction not found." });
+    if (transaction.status === "successful") {
+      const existingPost = await AdvertisedPost.findOne({ transactionId: razorpay_order_id });
+      if (existingPost) return res.status(409).json({ message: "Post already created." });
     }
 
-    // Create the advertised post after successful payment
+    transaction.status = "successful";
+    await transaction.save();
+
+    const data = transaction.postPayload;
+
     const newPost = new AdvertisedPost({
-      title: postData.title,
-      pageId: postData.pageId,
-      timeSlot: postData.timeSlot,
-      dateSlot: postData.dateSlot,
-      ageGroup: postData.ageGroup,
-      communities: postData.communities,
+      title: data.title,
+      description: data.description,
+      pageId: data.pageId,
+      dateSlot: data.dateSlot,
+      ageGroup: data.ageGroup,
+      buttonLabel: data.buttonLabel,
+      premium: data.premium,
       createdBy: req.user.id,
-      buttonLabel: postData.buttonLabel,
-      orderId: razorpay_order_id
+      transactionId: razorpay_order_id,
+      communities: transaction.communities,
+      imagesArray: data.imagesArray || [], // ✔️ Add uploaded images
     });
-
-
-    if (postData.files && postData.files.length > 0) {
-      const uploadDetails = await uploadFilesToCloudinary(postData.files, process.env.FOLDER_NAME);
-      newPost.imagesArray = uploadDetails.map((file) => file.secure_url);
-    }
 
     await newPost.save();
 
-    res.status(201).json({
-      success: true,
-      message: "Payment successful, advertised post created.",
-      post: newPost,
-      transaction: updatedTransaction,
+    // Link to Page & Communities
+    await Page.findByIdAndUpdate(data.pageId, {
+      $push: { advertisedPosts: newPost._id },
     });
+
+    await Promise.all(transaction.communities.map(id =>
+      Community.findByIdAndUpdate(id, {
+        $addToSet: { advertisedPosts: newPost._id },
+      })
+    ));
+
+    return res.status(201).json({ success: true, message: "Post created", post: newPost });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error verifying payment.", error: error.message });
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Post creation failed", error: error.message });
   }
 };
+
 
 
 // Get Advertised Posts
