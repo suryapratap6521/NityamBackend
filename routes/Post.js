@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { createPost, getAllPosts,  getCommunityPost, deletePost,createAdv,voteOnPoll,getVoters,getCommunityEvents,getEventById,updatePost} = require("../controllers/Post");
+const { createPost, getAllPosts,  getCommunityPost, deletePost,createAdv,voteOnPoll,getVoters,getCommunityEvents,getEventById,updatePost,getPostByIdForPreview,getPostById} = require("../controllers/Post");
 
 const { auth } = require("../middlewares/auth");
 
@@ -14,4 +14,8 @@ router.get('/:postId/voters/:optionIndex', auth,getVoters);
 router.post('/:postId/vote', auth, voteOnPoll);
 router.get("/events", auth, getCommunityEvents);
 router.get('/event/:id',auth,getEventById);
+router.get('/preview/:postId', auth, getPostByIdForPreview);
+// 📁 routes/Post.js
+router.get("/post/:id", auth, getPostById);
+
 module.exports = router;

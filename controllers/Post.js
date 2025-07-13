@@ -406,6 +406,72 @@ exports.getCommunityPost = async (req, res) => {
   }
 };
 
+// GET: /api/v1/post/preview/:postId
+exports.getPostByIdForPreview = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const postId = req.params.postId;
+
+    // Basic auth check
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Login required" });
+    }
+
+    const user = await User.findById(userId).select("communityDetails");
+    if (!user || !user.communityDetails) {
+      return res.status(403).json({
+        success: false,
+        message: "You must join a community to view this post.",
+      });
+    }
+
+    const post = await Post.findById(postId)
+      .populate("postByUser", "firstName lastName image")
+      .populate("likes", "_id")
+      .lean();
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+
+    // Minimal preview content
+    const preview = {
+      _id: post._id,
+      title: post.content?.slice(0, 120) || "",
+      image: post.image?.[0] || null,
+      postedBy: post.postByUser,
+      likes: post.likes.length,
+      createdAt: post.createdAt,
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "Post preview fetched",
+      post: preview,
+    });
+  } catch (error) {
+    console.error("Error in post preview:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// 📁 controllers/Post.js
+exports.getPostById = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id)
+      .populate("postByUser", "firstName lastName image");
+    
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+
+    res.status(200).json({ success: true, post });
+  } catch (err) {
+    console.error("❌ Error in getPostById:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 
 
 

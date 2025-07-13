@@ -79,37 +79,36 @@ exports.getServices = async (req, res) => {
     }
 };
 
-
-exports.getServiceById = async (req, res) => {
+exports.getServicesByUserId = async (req, res) => {
   try {
-    const { id } = req.params;  // using route parameter
-    const service = await Services.findById(id)
-      .populate({
-        path: 'createdBy',
-        select: 'firstName lastName email',
-        populate: {
-          path: 'communityDetails',
-          select: 'communityName'
-        }
-      })
-      .exec();
+    const { userId } = req.params;
 
-    if (!service) {
+    const user = await User.findById(userId)
+      .populate({
+        path: "services",
+      })
+      .populate({
+        path: "communityDetails",
+        select: "communityName",
+      });
+
+    if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'Service not found',
+        message: "User not found",
       });
     }
 
     return res.status(200).json({
       success: true,
-      service,
+      services: user.services,
+      user, // if you also want user details in modal
     });
   } catch (error) {
-    console.error("Error fetching service:", error);
+    console.error("Error fetching user services:", error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error',
+      message: "Internal server error",
     });
   }
 };
