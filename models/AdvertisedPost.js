@@ -20,6 +20,7 @@ const commentSchema = new mongoose.Schema({
 
 const advertisedPostSchema = new mongoose.Schema({
   title: { type: String, required: true },
+  description: { type: String, required: true },
   imagesArray: [String],
   ageGroup: {
     minAge: { type: Number, required: true },

@@ -256,12 +256,10 @@ exports.getCommunityPost = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // Get user and community info
-    const userDetails = await User.findById(userId)
-      .populate({
-        path: "additionalDetails",
-        select: "dateOfBirth",
-      });
+    const userDetails = await User.findById(userId).populate({
+      path: "additionalDetails",
+      select: "dateOfBirth",
+    });
 
     if (!userDetails || !userDetails.communityDetails) {
       return res.status(401).json({
@@ -272,7 +270,6 @@ exports.getCommunityPost = async (req, res) => {
 
     const communityId = userDetails.communityDetails;
 
-    // Fetch community with advertised posts populated
     const community = await Community.findById(communityId)
       .select("posts advertisedPosts")
       .populate({
@@ -310,20 +307,16 @@ exports.getCommunityPost = async (req, res) => {
         ],
       });
 
-    const totalPosts = community.posts.length;
-    const totalPages = Math.ceil(totalPosts / limit);
-    const paginatedPostIds = community.posts
-      .slice()
-      .reverse()
-      .slice(skip, skip + limit);
+    const totalNormalPosts = community.posts.length;
+    const totalPages = Math.ceil(totalNormalPosts / limit);
+    const paginatedPostIds = community.posts.slice().reverse().slice(skip, skip + limit);
 
-    // Fetch paginated normal posts
     const posts = await Post.find({ _id: { $in: paginatedPostIds } })
       .populate([
         {
           path: "postByUser",
-          select: "firstName lastName email city state communityDetails image community",
-          populate: { path: "communityDetails", select: "communityName" },
+          select: "firstName lastName email city state communityDetails image",
+          populate: { path: "communityDetails", select: "communityName community" },
         },
         {
           path: "likes",
@@ -352,34 +345,16 @@ exports.getCommunityPost = async (req, res) => {
       ])
       .sort({ createdAt: -1 });
 
-    // Handle empty posts
-    if (!posts || posts.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: "No posts found",
-        feed: [],
-        pagination: {
-          currentPage: page,
-          totalPages: 0,
-          hasMore: false,
-        },
-      });
-    }
-
-    // 🔢 Calculate user's age
     const currentDate = new Date();
     const userDOB = new Date(userDetails.additionalDetails?.dateOfBirth);
-    const ageInMs = currentDate - userDOB;
-    const userAge = Math.floor(ageInMs / (1000 * 60 * 60 * 24 * 365.25));
+    const userAge = Math.floor((currentDate - userDOB) / (1000 * 60 * 60 * 24 * 365.25));
 
-    // 🔎 Filter advertised posts by dateSlot and ageGroup
     const filteredAds = (community.advertisedPosts || [])
       .filter((ad) => {
         const start = new Date(ad.dateSlot?.startDate);
         const end = new Date(ad.dateSlot?.endDate);
         const minAge = ad.ageGroup?.minAge || 0;
         const maxAge = ad.ageGroup?.maxAge || 150;
-
         return (
           currentDate >= start &&
           currentDate <= end &&
@@ -389,10 +364,8 @@ exports.getCommunityPost = async (req, res) => {
       })
       .map((ad) => ({ ...ad._doc, type: 1 }));
 
-    // Format normal posts
     const normalPosts = posts.map((p) => ({ ...p._doc, type: 0 }));
 
-    // 🧩 Interleave ads every 4 posts
     const combinedFeed = [];
     const AD_INTERVAL = 4;
     let postIndex = 0;
@@ -407,7 +380,13 @@ exports.getCommunityPost = async (req, res) => {
       }
     }
 
-    // 📤 Send response
+    // Push remaining ads
+    while (adIndex < filteredAds.length) {
+      combinedFeed.push(filteredAds[adIndex++]);
+    }
+
+  
+
     return res.status(200).json({
       success: true,
       message: "Community posts fetched successfully",
@@ -415,7 +394,7 @@ exports.getCommunityPost = async (req, res) => {
       pagination: {
         currentPage: page,
         totalPages,
-        hasMore: page < totalPages,
+        hasNextPage: page < totalPages,
       },
     });
   } catch (error) {
