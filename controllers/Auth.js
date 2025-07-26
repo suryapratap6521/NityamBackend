@@ -453,7 +453,8 @@ exports.searchUsersAdvanced = async (req, res) => {
 // Login controller for authenticating users
 exports.login = async (req, res) => {
 	try {
-		const { email, password } = req.body;
+		const {  password } = req.body;
+		const email = req.body.email?.toLowerCase();
 
 		// Validate input fields
 		if (!email || !password) {
