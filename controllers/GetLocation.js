@@ -18,7 +18,7 @@ exports.getAccessToken = async (req, res) => {
             }
         );
 
-        res.status(200).json(response.data); // Send the token response to the frontend
+        res.status(200).json(response.data); // Send the token response to the fronten
     } catch (error) {
         res.status(error.response?.status || 500).json({
             message: 'Failed to fetch access token',
