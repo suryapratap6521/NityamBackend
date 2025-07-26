@@ -12,6 +12,7 @@
   const session = require("express-session");
   const passport = require("./config/passport");
 
+
   const { cloudinaryConnect } = require("./config/cloudinary");
   const database = require("./config/database");
   const Message = require("./models/Message");
@@ -64,6 +65,7 @@
   app.use("/api/v1/token", require("./routes/Get_AccessToken"));
   app.use("/api/v1/advpost", require("./routes/advPostRoutes"));
   app.use("/api/v1/notifications", require("./routes/Notification"));
+  app.use("/api/v1/contact", require("./routes/contactRoutes"));
 
   app.get("/", (_, res) => res.json({ success: true, message: "Server running" }));
 

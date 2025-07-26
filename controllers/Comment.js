@@ -17,6 +17,10 @@ exports.commentOnPost = async (req, res) => {
       path: "comments.commentedBy",
       select: "firstName lastName email city state communityDetails image",
       populate: { path: "communityDetails", select: "communityName" },
+    })
+    .populate({
+      path: "pollOptions.votes",
+      select: "firstName lastName email image",
     });
     console.log("--postcomment",post.comments);
 

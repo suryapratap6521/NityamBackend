@@ -342,6 +342,10 @@ exports.getCommunityPost = async (req, res) => {
             },
           ],
         },
+            {
+      path: "pollOptions.votes",
+      select: "firstName lastName email image",
+    },
       ])
       .sort({ createdAt: -1 });
 

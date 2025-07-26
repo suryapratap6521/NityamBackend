@@ -1,3 +1,6 @@
+// Advanced LinkedIn-style user search
+// GET /api/searchUsersAdvanced?search=...&filter=community|city|state|india
+
 const bcrypt = require("bcrypt");
 const User = require("../models/User");
 const Community=require('../models/Community');
@@ -11,7 +14,7 @@ const passport=require("passport");
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const twilio = require('twilio');
 const { uploadFilesToCloudinary } = require("../utils/imageUploader");
-
+const axios = require("axios");
 
 require("dotenv").config();
 // Twilio configuration
@@ -22,170 +25,19 @@ const client = twilio(accountSid, authToken);
 
 const mongoose = require('mongoose');
 
-//signup controller for registering the Users
-// exports.signup = async (req, res) => {
-//     console.log(req.body);
-//     try {
-//         // Destructure fields from the request body
-//         const {
-//             firstName,
-//             lastName,
-//             email,
-//             password,
-//             city,
-//             state,
-//             community,
-//             phoneNumber,
-//             postalCost,
-//             confirmPassword,
-// 			profession,
-// 			hourlyCharge,
-//             otp,
-//         } = req.body;
-// 		console.log(firstName,
-//             lastName,
-//             email,
-//             password,
-//             city,
-//             state,
-//             community,
-//             phoneNumber,
-//             postalCost,
-//             confirmPassword,
-// 			profession,
-// 			hourlyCharge,
-//             otp);
-//         // Check if All Details are there or not
-//         if (
-//             !firstName ||
-//             !lastName ||
-//             !email ||
-//             !password ||
-//             !confirmPassword ||
-//             !otp ||
-//             !phoneNumber ||
-//             !state ||
-//             !city ||
-//             !community ||
-//             !postalCost
-//         ) {
-//             return res.status(403).send({
-//                 success: false,
-//                 message: "All Fields are required",
-//             });
-//         }
-//         // Check if password and confirm password match
-//         if (password !== confirmPassword) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message:
-//                     "Password and Confirm Password do not match. Please try again.",
-//             });
-//         }
-
-//         // Check if user already exists
-//         const existingUser = await User.findOne({ email });
-//         if (existingUser) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "User already exists. Please sign in to continue.",
-//             });
-//         }
-// 		const existingUserWithNumber=await User.findOne({phoneNumber})
-// 		if(existingUserWithNumber){
-// 			return res.status(400).json({
-// 				success:false,
-// 				message:"User already exists with this Phone number",
-// 			})
-// 		}
-		
-
-//         // Find the most recent OTP for the email
-//         const response = await OTP.find({ phoneNumber }).sort({ createdAt: -1 }).limit(1);
-//         console.log(response,"--------->response of otp");
-//         if (response.length === 0 || otp !== response[0].otp) {
-//             // OTP not found for the email or invalid OTP
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "The OTP is not valid",
-//             });
-//         }
-
-//         // Hash the password
-//         const hashedPassword = await bcrypt.hash(password, 10);
-
-//         // Check if the community already exists
-//         let communityDetails = await Community.findOne({ communityName: community });
-
-//         if (!communityDetails) {
-//             // Create the community if it doesn't exist
-//             communityDetails = await Community.create({ communityName: community });
-//         }
-
-//         // Create the Additional Profile For User
-//         const profileDetails = await Profile.create({
-//             gender: null,
-//             dateOfBirth: null,
-//             about: null,
-//             phoneNumber: null,
-//         });
-
-//         // Create the user
-//         const user = await User.create({
-//             firstName,
-//             lastName,
-//             email,
-//             phoneNumber,
-//             password: hashedPassword,
-//             accountType: "People",
-//             additionalDetails: profileDetails._id,
-//             image: `https://api.dicebear.com/5.x/initials/svg?seed=${firstName} ${lastName}`,
-//             city,
-//             state,
-//             postalCost,
-//             communityDetails: communityDetails._id,
-// 			profession,
-// 			hourlyCharge, // Assign the community details to the user
-//         });
-// 		console.log(user);
-
-//         // Add user ObjectId to the community's userInCommunity array
-//         await Community.findByIdAndUpdate(
-//             communityDetails._id,
-//             { $addToSet: { userInCommunity: user._id } },
-//             { new: true }
-//         );
-
-//         return res.status(200).json({
-//             success: true,
-//             user,
-//             message: "User registered successfully",
-//         });
-//     } catch (error) {
-//         console.error(error);
-//         return res.status(500).json({
-//             success: false,
-//             message: "User cannot be registered. Please try again.",
-//         });
-//     }
-// };
-
-
-
 // Signup controller for registering new users
 exports.signup = async (req, res) => {
 	try {
-		const { firstName, lastName, email, phoneNumber, password, confirmPassword, otp } = req.body;
-		console.log(req.body)
-		// Basic validation
-		if (!firstName || !email || !phoneNumber || !password || !confirmPassword) {
+		const { firstName, lastName, email, phoneNumber, password, confirmPassword, otp,otpDetailsId } = req.body;
+		console.log(firstName, lastName, email, phoneNumber, password, confirmPassword, otp,otpDetailsId,"--------->req.body");
+
+		if (!firstName || !email || !phoneNumber || !password || !confirmPassword || !otp || !otpDetailsId) {
 			return res.status(400).json({
 				success: false,
 				message: "All fields are required.",
 			});
 		}
 
-		// Password and Confirm Password match validation
 		if (password !== confirmPassword) {
 			return res.status(400).json({
 				success: false,
@@ -193,7 +45,6 @@ exports.signup = async (req, res) => {
 			});
 		}
 
-		// Check if user already exists with the email
 		const existingUserByEmail = await User.findOne({ email });
 		if (existingUserByEmail) {
 			return res.status(400).json({
@@ -202,7 +53,6 @@ exports.signup = async (req, res) => {
 			});
 		}
 
-		// Check if user already exists with the phone number
 		const existingUserByPhone = await User.findOne({ phoneNumber });
 		if (existingUserByPhone) {
 			return res.status(400).json({
@@ -211,21 +61,26 @@ exports.signup = async (req, res) => {
 			});
 		}
 
-		// Validate OTP for the phone number
-		const latestOTP = await OTP.findOne({phoneNumber}).sort({ createdAt: -1 });
-		console.log(otp,"---------otp");
-		console.log(latestOTP,"------>latest");
-		if (!latestOTP || otp !== latestOTP.otp) {
+		// Fetch latest OTP session ID for this phone number
+
+
+		// Verify OTP using 2Factor
+		const verifyRes = await axios.get(
+			`https://2factor.in/API/V1/${process.env.API_KEY}/SMS/VERIFY/${otpDetailsId}/${otp}`
+		);
+		console.log(verifyRes,"--------->verifyRes");
+
+		const { Status, Details } = verifyRes.data;
+		if (Status !== "Success") {
 			return res.status(400).json({
 				success: false,
 				message: "Invalid or expired OTP.",
 			});
 		}
 
-		// Hash the password before saving it
+		// Hash password
 		const hashedPassword = await bcrypt.hash(password, 10);
 
-		// Create user profile
 		const profile = await Profile.create({
 			gender: null,
 			dateOfBirth: null,
@@ -233,7 +88,6 @@ exports.signup = async (req, res) => {
 			phoneNumber: null,
 		});
 
-		// Create new user
 		const user = await User.create({
 			firstName,
 			lastName,
@@ -245,37 +99,36 @@ exports.signup = async (req, res) => {
 			image: `https://api.dicebear.com/5.x/initials/svg?seed=${firstName} ${lastName}`,
 		});
 
-		// Generate JWT token
 		const token = jwt.sign(
 			{ email: user.email, id: user._id, accountType: user.accountType },
 			process.env.JWT_SECRET,
-			{ expiresIn: '24h' }
+			{ expiresIn: "24h" }
 		);
 
-		// Attach token to user and set cookie
 		user.token = token;
-		user.password = undefined; // Do not send password in response
+		user.password = undefined;
 
 		const options = {
 			expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
 			httpOnly: true,
 		};
 
-		// Respond with the token and user data
 		res.cookie("token", token, options).status(201).json({
 			success: true,
 			token,
 			user,
 			message: "User registered successfully and logged in.",
 		});
+
 	} catch (error) {
-		console.error("Signup Error:", error);
+		console.error("Signup Error:", error.message);
 		return res.status(500).json({
 			success: false,
 			message: "Signup failed. Please try again later.",
 		});
 	}
 };
+
 // Controller to update gender and date of birth in profile after signup
 exports.profileDetails = async (req, res) => {
 	console.log("dasdasd");
@@ -377,6 +230,65 @@ exports.communityAddress = async (req, res) => {
 	  });
 	}
   };
+
+exports.searchUsersAdvanced = async (req, res) => {
+  const userId = req.user.id;
+  const searchTerm = req.query.search || "";
+  const filter = req.query.filter || "community";
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 20;
+
+  try {
+    const user = await User.findById(userId).lean();
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    let query = { _id: { $ne: userId } };
+
+    if (searchTerm) {
+      const regex = new RegExp(searchTerm, "i");
+      query.$or = [
+        { firstName: regex },
+        { lastName: regex },
+        { profession: regex },
+      ];
+    }
+
+    // Filter by region
+    if (filter === "community") query.communityDetails = user.communityDetails;
+    else if (filter === "city") query.city = user.city;
+    else if (filter === "state") query.state = user.state;
+    // 'india' = no additional filter
+
+    // Find users
+    let allUsers = await User.find(query)
+      .populate("communityDetails", "communityName")
+      .populate("additionalDetails")
+      .populate("services", "name")
+      .select("firstName lastName email image profession services city state communityDetails additionalDetails")
+      .lean();
+
+    // Custom filter on service names
+    if (searchTerm) {
+      const lowerSearch = searchTerm.toLowerCase();
+      allUsers = allUsers.filter(user =>
+        user.services?.some(svc => svc.name.toLowerCase().includes(lowerSearch)) ||
+        user.firstName.toLowerCase().includes(lowerSearch) ||
+        user.lastName.toLowerCase().includes(lowerSearch) ||
+        user.profession?.toLowerCase().includes(lowerSearch)
+      );
+    }
+
+    const totalUsers = allUsers.length;
+    const paginatedUsers = allUsers.slice((page - 1) * limit, page * limit);
+
+    res.status(200).json({ success: true, users: paginatedUsers, totalUsers, page, limit });
+  } catch (err) {
+    console.error("Search error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
   
 
   exports.community = async (req, res) => {
@@ -552,9 +464,11 @@ exports.login = async (req, res) => {
 		}
 
 		// Check if the user exists
-	const user = await User.findOne({ email })
-  	.populate('additionalDetails')
-  	.populate('communityDetails');
+const user = await User.findOne({ email })
+  .populate('additionalDetails')
+  .populate('communityDetails')
+
+
 	console.log(user,"-------->user");
 		if (!user) {
 			return res.status(401).json({
@@ -678,112 +592,59 @@ exports.googleLogin = passport.authenticate('google', {
 
 
 
-//sending otp for email verification
-// exports.sendotp = async (req, res) => {
-// 	try {
-// 		const { email } = req.body;
-
-// 		// Check if user is already present
-// 		// Find user with provided email
-// 		const checkUserPresent = await User.findOne({ email });
-// 		// to be used in case of signup
-
-// 		// If user found with provided email
-// 		if (checkUserPresent) {
-// 			// Return 401 Unauthorized status code with error message
-// 			return res.status(401).json({
-// 				success: false,
-// 				message: `User is Already Registered`,
-// 			});
-// 		}
-
-// 		var otp = otpGenerator.generate(6, {
-// 			upperCaseAlphabets: false,
-// 			lowerCaseAlphabets: false,
-// 			specialChars: false,
-// 		});
-// 		const result = await OTP.findOne({ otp: otp });
-// 		console.log("Result is Generate OTP Func");
-// 		console.log("OTP", otp);
-// 		console.log("Result", result);
-// 		while (result) {
-// 			otp = otpGenerator.generate(6, {
-// 				upperCaseAlphabets: false,
-// 			});
-// 			result = await OTP.findOne({ otp: otp });
-// 		}
-		
-// 		const otpPayload = { email, otp };
-// 		const otpBody = await OTP.create(otpPayload);
-// 		console.log("OTP Body", otpBody);
-// 		res.status(200).json({
-// 			success: true,
-// 			message: `OTP Sent Successfully`,
-// 			otp,
-// 		});
-// 	} catch (error) {
-// 		console.log(error.message);
-// 		return res.status(500).json({ success: false, error: error.message });
-// 	}
-// };
 
 
 exports.sendotp = async (req, res) => {
-    try {
-        const { phoneNumber,email } = req.body;
-		console.log(phoneNumber, "---->");
-        
-        // Check if the user already exists with this phone number
-        const existingUser = await User.findOne({phoneNumber});
-		console.log(existingUser,"----->ppopop");
-        if (existingUser) {
-            return res.status(400).json({
-                success: false,
-                message: "User already registered with this phone number.",
-            });
-        }
-		const existingUserWithEmail = await User.findOne({email});
-		console.log(existingUserWithEmail,"----->ppopop");
-        if (existingUserWithEmail) {
-            return res.status(400).json({
-                success: false,
-                message: "User already registered with this Email Id.",
-            });
-        }
-		
+	try {
+		const { phoneNumber, email } = req.body;
 
-        // Generate a 6-digit OTP
-		let otp = otpGenerator.generate(6, {
-			upperCaseAlphabets: false,
-			lowerCaseAlphabets: false,
-			specialChars: false,
+		// Check if the user already exists with this phone number
+		const existingUser = await User.findOne({ phoneNumber });
+		if (existingUser) {
+			return res.status(400).json({
+				success: false,
+				message: "User already registered with this phone number.",
+			});
+		}
+
+		const existingUserWithEmail = await User.findOne({ email });
+		if (existingUserWithEmail) {
+			return res.status(400).json({
+				success: false,
+				message: "User already registered with this Email Id.",
+			});
+		}
+
+		// Send OTP via 2Factor API
+		const response = await axios.get(
+			`https://2factor.in/API/V1/${process.env.API_KEY}/SMS/${phoneNumber}/AUTOGEN3/TruePadosi`
+		);
+		console.log(response,"--------->response of otp");
+
+		const { Status, Details } = response.data;
+		if (Status !== "Success") {
+			return res.status(500).json({
+				success: false,
+				message: "Failed to send OTP.",
+			});
+		}
+
+
+		res.status(200).json({
+			success: true,
+			Details,
+			message: "OTP sent successfully on your Phone Number.",
 		});
-		console.log(otp, "--->>>>>>");
-        
-        // Save OTP to the database
-        const otpPayload = { phoneNumber,email, otp };
-        const otpp=await OTP.create(otpPayload);
 
-        // Send OTP via SMS using Twilio
-        await client.messages.create({
-            from: '+14177398093', // Your Twilio phone number  +13148992511
-            to: `+91${phoneNumber}`, // Ensure correct international format
-            body: `Your OTP code is ${otp}`,
-        });
-
-        res.status(200).json({
-            success: true,
-			otpp,
-            message: "OTP sent successfully on your Phone Number and Email Id.",
-        });
-    } catch (error) {
-        console.error("Error sending OTP:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to send OTP.",
-        });
-    }
+	} catch (error) {
+		console.error("Error sending OTP:", error.message);
+		return res.status(500).json({
+			success: false,
+			message: "Failed to send OTP.",
+		});
+	}
 };
+
 
 
 //controllers for changing the password
@@ -903,7 +764,6 @@ exports.searchUsers = async (req, res) => {
 // 	  const userDetails = await User.findById(userId)
 // 		.populate("communityDetails", "communityName")
 // 		.populate("additional
-// Details", "
 
 
 

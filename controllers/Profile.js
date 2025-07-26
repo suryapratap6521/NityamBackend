@@ -3,6 +3,50 @@ const User = require("../models/User")
 const { uploadFilesToCloudinary } = require("../utils/imageUploader")
 const mongoose = require("mongoose")
 
+
+
+exports.getProfile = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const user = await User.findById(id)
+      .select("-password") // 👈 Exclude password field
+      .populate("additionalDetails")
+      .populate({
+        path: "communityDetails",
+        populate: [
+          { path: "advertisedPosts" },
+          { path: "posts" },
+          { path: "userInCommunity" },
+          
+        ],
+      })
+      .populate("pages")
+      .populate("postByUser")
+      .exec();
+
+    if (!user || !user.additionalDetails) {
+      return res.status(404).json({
+        success: false,
+        message: "Profile not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Profile fetched successfully",
+      data: user
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+
 // Method for updating a profile
 exports.updateProfile = async (req, res) => {
   try {

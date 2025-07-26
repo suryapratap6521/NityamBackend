@@ -26,7 +26,8 @@ exports.likePost = async (req, res) => {
   .populate("postByUser", "firstName lastName email image city community")
   .populate("comments.commentedBy", "firstName lastName image")
   .populate("comments.replies.repliedBy", "firstName lastName image")
-  .populate("likes");
+  .populate("likes")
+  .populate("pollOptions.votes", "firstName lastName email image");
 
 
     global.io.emit("post liked", {

@@ -17,7 +17,8 @@ const {
   communityAddress,
   community,
   verification,
-  profession
+  profession,
+  searchUsersAdvanced
 } = require("../controllers/Auth")
 const {
   resetPasswordToken,
@@ -67,6 +68,10 @@ router.post("/reset-password", resetPassword)
 
 // route for generating search api
 router.get("/search",auth,searchUsers);
+
+// Route for advanced user search with filters
+router.get("/searchAdvanced", auth, searchUsersAdvanced);
+
 // Export the router for use in the main application
 
 router.get('/google', googleLogin);
