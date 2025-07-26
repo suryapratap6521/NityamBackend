@@ -1,8 +1,8 @@
 const axios = require('axios');
 
-const MAPMYINDIA_BASE_URL = process.env.MAPMYINDIA_BASE_URL;
-const CLIENT_ID = process.env.CLIENT_ID; 
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const MAPMYINDIA_BASE_URL = process.env.MAPMYINDIA_BASE_URL || 'https://outpost.mapmyindia.com/api/security/oauth/token';
+const CLIENT_ID = process.env.CLIENT_ID || "33OkryzDZsIeIOffvojr_ffCes-0HvEq2C7enI0l9So2MWMZD-TQdwfOsArLhHAKs0Z7EcPbhAUqZFpFFRUE2Q==";
+ const CLIENT_SECRET = process.env.CLIENT_SECRET || "lrFxI-iSEg--mdVcBQmHdGX2Wg2WUCNKICT4TpkGsyAf3gLxtKD2YUelX8GeJfiS-CXlcNM4FdZWK_Btnyug-5plpoFZeYC6";
 
 // Controller to fetch the access token
 exports.getAccessToken = async (req, res) => {
