@@ -3,6 +3,13 @@ const axios = require('axios');
 const MAPMYINDIA_BASE_URL = process.env.MAPMYINDIA_BASE_URL || 'https://outpost.mapmyindia.com/api/security/oauth/token';
 const CLIENT_ID = process.env.CLIENT_ID || "33OkryzDZsIeIOffvojr_ffCes-0HvEq2C7enI0l9So2MWMZD-TQdwfOsArLhHAKs0Z7EcPbhAUqZFpFFRUE2Q==";
  const CLIENT_SECRET = process.env.CLIENT_SECRET || "lrFxI-iSEg--mdVcBQmHdGX2Wg2WUCNKICT4TpkGsyAf3gLxtKD2YUelX8GeJfiS-CXlcNM4FdZWK_Btnyug-5plpoFZeYC6";
+console.log("MAPMYINDIA_BASE_URL", MAPMYINDIA_BASE_URL);
+console.log("CLIENT_ID", CLIENT_ID);
+console.log("CLIENT_SECRET", CLIENT_SECRET);
+// Ensure that the required environment variables are set
+if (!MAPMYINDIA_BASE_URL || !CLIENT_ID || !CLIENT_SECRET) {
+    throw new Error('Missing required environment variables: MAPMYINDIA_BASE_URL, CLIENT_ID, or CLIENT_SECRET');
+}
 
 // Controller to fetch the access token
 exports.getAccessToken = async (req, res) => {
