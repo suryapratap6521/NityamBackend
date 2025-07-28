@@ -26,14 +26,23 @@
   // 🛠 DB Connect
   database.connect();
 
-  const allowedOrigins = ["http://localhost:3000", "https://nityam-frontend-lemon.vercel.app"];
-  app.use(cors({
-    origin: (origin, cb) => {
-      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-      cb(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  }));
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://nityam-frontend-lemon.vercel.app"
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.error("Not allowed by CORS:", origin);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+}));
+
 
   app.use(express.json());
   app.use(cookieParser());
