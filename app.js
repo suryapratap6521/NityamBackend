@@ -32,17 +32,28 @@ const allowedOrigins = [
 ];
 
 app.set('trust proxy', 1);
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://nityam-frontend-lemon.vercel.app"
+];
+
+app.set('trust proxy', 1);
+
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.error("Not allowed by CORS:", origin);
-      callback(new Error("Not allowed by CORS"));
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, Google redirect)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, origin); // Must echo exact origin string
     }
+
+    console.error("❌ CORS error: Origin not allowed ->", origin);
+    return callback(new Error("Not allowed by CORS"));
   },
-  credentials: true,
+  credentials: true, // Required for sending cookies
 }));
+
 
 
   app.use(express.json());
