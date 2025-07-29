@@ -239,52 +239,52 @@ exports.searchUsersAdvanced = async (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 20;
 
   try {
-    const user = await User.findById(userId).lean();
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+	const user = await User.findById(userId).lean();
+	if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    let query = { _id: { $ne: userId } };
+	let query = { _id: { $ne: userId } };
 
-    if (searchTerm) {
-      const regex = new RegExp(searchTerm, "i");
-      query.$or = [
-        { firstName: regex },
-        { lastName: regex },
-        { profession: regex },
-      ];
-    }
+	if (searchTerm) {
+	  const regex = new RegExp(searchTerm, "i");
+	  query.$or = [
+		{ firstName: regex },
+		{ lastName: regex },
+		{ profession: regex },
+	  ];
+	}
 
-    // Filter by region
-    if (filter === "community") query.communityDetails = user.communityDetails;
-    else if (filter === "city") query.city = user.city;
-    else if (filter === "state") query.state = user.state;
-    // 'india' = no additional filter
+	// Filter by region
+	if (filter === "community") query.communityDetails = user.communityDetails;
+	else if (filter === "city") query.city = user.city;
+	else if (filter === "state") query.state = user.state;
+	// 'india' = no additional filter
 
-    // Find users
-    let allUsers = await User.find(query)
-      .populate("communityDetails", "communityName")
-      .populate("additionalDetails")
-      .populate("services", "name")
-      .select("firstName lastName email image profession services city state communityDetails additionalDetails")
-      .lean();
+	// Find users
+	let allUsers = await User.find(query)
+	  .populate("communityDetails", "communityName")
+	  .populate("additionalDetails")
+	  .populate("services", "name")
+	  .select("firstName lastName email image profession services city state communityDetails additionalDetails")
+	  .lean();
 
-    // Custom filter on service names
-    if (searchTerm) {
-      const lowerSearch = searchTerm.toLowerCase();
-      allUsers = allUsers.filter(user =>
-        user.services?.some(svc => svc.name.toLowerCase().includes(lowerSearch)) ||
-        user.firstName.toLowerCase().includes(lowerSearch) ||
-        user.lastName.toLowerCase().includes(lowerSearch) ||
-        user.profession?.toLowerCase().includes(lowerSearch)
-      );
-    }
+	// Custom filter on service names
+	if (searchTerm) {
+	  const lowerSearch = searchTerm.toLowerCase();
+	  allUsers = allUsers.filter(user =>
+		user.services?.some(svc => svc.name.toLowerCase().includes(lowerSearch)) ||
+		user.firstName.toLowerCase().includes(lowerSearch) ||
+		user.lastName.toLowerCase().includes(lowerSearch) ||
+		user.profession?.toLowerCase().includes(lowerSearch)
+	  );
+	}
 
-    const totalUsers = allUsers.length;
-    const paginatedUsers = allUsers.slice((page - 1) * limit, page * limit);
+	const totalUsers = allUsers.length;
+	const paginatedUsers = allUsers.slice((page - 1) * limit, page * limit);
 
-    res.status(200).json({ success: true, users: paginatedUsers, totalUsers, page, limit });
+	res.status(200).json({ success: true, users: paginatedUsers, totalUsers, page, limit });
   } catch (err) {
-    console.error("Search error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+	console.error("Search error:", err);
+	res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -447,6 +447,8 @@ exports.searchUsersAdvanced = async (req, res) => {
 	}
   };
   
+
+
   
   
 
@@ -564,7 +566,7 @@ exports.googleLogin = passport.authenticate('google', {
 		});
 		res.cookie('token', token, {
 		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		  httpOnly: false,
+		  httpOnly: true,
 		  secure: true,
 		  sameSite: 'None',
 		});
@@ -758,14 +760,27 @@ exports.searchUsers = async (req, res) => {
 	  res.status(500).send("Server Error in searching the community");
 	}
   };
-// exports.getUserDetails = async (req, res) => {
-// 	const userId = req.user.id;
-  
-// 	try {
-// 	  const userDetails = await User.findById(userId)
-// 		.populate("communityDetails", "communityName")
-// 		.populate("additional
 
+
+exports.getUser = async (req, res) => {
+  try {
+	const token = req.cookies.token;
+	if (!token) return res.status(401).json({ success: false });
+
+	const decoded = jwt.verify(token, process.env.JWT_SECRET);
+const user = await User.findById(decoded.id)
+  .populate("communityDetails", "communityName")
+  .populate("additionalDetails")
+  .populate("services", "name")
+  .select("firstName lastName email image profession services city state communityDetails additionalDetails");
+
+	if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+	return res.status(200).json({ success: true, user, token });
+  } catch (err) {
+	return res.status(401).json({ success: false });
+  }
+};
 
 
 

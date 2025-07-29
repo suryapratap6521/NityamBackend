@@ -3,9 +3,7 @@ const axios = require('axios');
 const MAPMYINDIA_BASE_URL = process.env.MAPMYINDIA_BASE_URL 
 const CLIENT_ID = process.env.CLIENT_ID 
 const CLIENT_SECRET = process.env.CLIENT_SECRET 
-console.log("MAPMYINDIA_BASE_URL", MAPMYINDIA_BASE_URL);
-console.log("CLIENT_ID", CLIENT_ID);
-console.log("CLIENT_SECRET", CLIENT_SECRET);
+
 // Ensure that the required environment variables are set
 if (!MAPMYINDIA_BASE_URL || !CLIENT_ID || !CLIENT_SECRET) {
     throw new Error('Missing required environment variables: MAPMYINDIA_BASE_URL, CLIENT_ID, or CLIENT_SECRET');

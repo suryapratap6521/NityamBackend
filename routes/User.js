@@ -18,7 +18,8 @@ const {
   community,
   verification,
   profession,
-  searchUsersAdvanced
+  searchUsersAdvanced,
+  getUser
 } = require("../controllers/Auth")
 const {
   resetPasswordToken,
@@ -76,5 +77,6 @@ router.get("/searchAdvanced", auth, searchUsersAdvanced);
 
 router.get('/google', googleLogin);
 router.get('/google/callback',googleCallback);
+router.get('/getuser',auth,getUser)
 // router.post('/googledetails',auth,googleDetails);
 module.exports = router
