@@ -32,12 +32,7 @@ const allowedOrigins = [
 ];
 
 app.set('trust proxy', 1);
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://nityam-frontend-lemon.vercel.app"
-];
 
-app.set('trust proxy', 1);
 
 app.use(cors({
   origin: (origin, callback) => {
