@@ -772,7 +772,7 @@ const user = await User.findById(decoded.id)
   .populate("communityDetails", "communityName")
   .populate("additionalDetails")
   .populate("services", "name")
-  .select("firstName lastName email image profession services city state communityDetails additionalDetails");
+  .select("firstName lastName email image profession services city state communityDetails additionalDetails hourlyCharge community documentUrl verificationByPostalCard Address postalCost");
 
 	if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
