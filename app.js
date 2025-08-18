@@ -30,8 +30,10 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:3002",
+  "https://truepadosi.com",
+   "https://www.truepadosi.com",
   "https://nityam-frontend-lemon.vercel.app",
-  "https://truepadosi.com"
+  
 ];
 
 app.set('trust proxy', 1);
