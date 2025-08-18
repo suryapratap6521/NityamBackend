@@ -581,9 +581,9 @@ exports.googleLogin = passport.authenticate('google', {
 		  (updatedUser.city && updatedUser.state && updatedUser.postalCost && updatedUser.community);
 		
 		if (hasOnboarding) {
-		  return res.redirect('https://nityam-frontend-lemon.vercel.app/google-auth-success');
+		  return res.redirect('https://truepadosi.com/google-auth-success');
 		} else {
-		  return res.redirect('https://nityam-frontend-lemon.vercel.app/google-auth-success');
+		  return res.redirect('https://truepadosi.com/google-auth-success');
 		}
 	  } catch (error) {
 		console.error("Google Callback Error:", error);
