@@ -52,7 +52,7 @@ app.use(cors({
     console.error("❌ CORS error: Origin not allowed ->", origin);
     return callback(new Error("Not allowed by CORS"));
   },
-  credentials: true, // Required for sending cookies
+  credentials: true, // Required for sending cookiesss
   
 }));
 
