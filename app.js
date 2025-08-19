@@ -34,6 +34,7 @@ const allowedOrigins = [
    "https://www.truepadosi.com",
   "https://nityam-frontend-lemon.vercel.app",
   
+  
 ];
 
 app.set('trust proxy', 1);
@@ -45,13 +46,14 @@ app.use(cors({
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
-      return callback(null, origin); // Must echo exact origin string
+      return callback(null, true); // Must echo exact origin string
     }
 
     console.error("❌ CORS error: Origin not allowed ->", origin);
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true, // Required for sending cookies
+  
 }));
 
 
