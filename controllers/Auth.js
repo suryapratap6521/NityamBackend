@@ -657,7 +657,10 @@ exports.changePassword = async (req, res) => {
 	try {
 		// Get user data from req.user
 		const userDetails = await User.findById(req.user.id);
-
+		// check the user is present in the database
+		if (!userDetails) {
+			return res.status(404).json({ success: false, message: "User not found" });
+		}
 		// Get old password, new password, and confirm new password from req.body
 		const { oldPassword, newPassword, confirmNewPassword } = req.body;
 
