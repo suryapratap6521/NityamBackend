@@ -93,9 +93,22 @@ exports.getServicesByUserId = async (req, res) => {
       });
 
     if (!user) {
+      // Try to find a service by this ID
+      const service = await Services.findById(userId).populate({
+        path: "createdBy",
+        select: "firstName lastName email profession hourlyCharge communityDetails",
+        populate: { path: "communityDetails", select: "communityName" }
+      });
+      console.log(service);
+      if (service) {
+        return res.status(200).json({
+          success: true,
+          service,
+        });
+      }
       return res.status(404).json({
         success: false,
-        message: "User not found",
+        message: "User or Service not found",
       });
     }
 
