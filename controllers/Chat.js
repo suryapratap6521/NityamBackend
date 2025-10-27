@@ -2,7 +2,6 @@ const Chat = require("../models/Chat");
 
 exports.accessChat = async (req, res) => {
   const { userId } = req.body;
-
   if (!userId) {
     return res.status(400).json({
       success: false,
@@ -23,6 +22,7 @@ exports.accessChat = async (req, res) => {
         select: "-password",
       },
     });
+   
 
     if (existingChat) {
       return res.status(200).json({
@@ -39,6 +39,7 @@ exports.accessChat = async (req, res) => {
     };
 
     const createdChat = await Chat.create(chatData);
+    console.log("New chat created:", createdChat);
 
     const fullChat = await Chat.findById(createdChat._id)
       .populate("users", "-password")
@@ -49,7 +50,6 @@ exports.accessChat = async (req, res) => {
           select: "-password",
         },
       });
-
     return res.status(201).json({
       success: true,
       message: "Chat created successfully",

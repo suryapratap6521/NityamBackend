@@ -9,7 +9,6 @@ router.post("/",auth,sendMessage);
 router.post("/seen", auth, markMessageAsSeen);
 router.post("/delivered", auth, markMessageAsDelivered);
 // router.post('/reset-unread',auth,resetUnreadCount);
-
 // router.put("/read/:chatId", auth, markChatAsRead)
 
 module.exports=router;
