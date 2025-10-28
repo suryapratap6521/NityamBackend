@@ -91,6 +91,15 @@ app.use(cors({
   app.use("/api/v1/contact", require("./routes/contactRoutes"));
 
   app.get("/", (_, res) => res.json({ success: true, message: "Server running" }));
+  app.get('/health', (req, res) => {
+  // Optional simple protection: ?key=YOUR_HEALTH_KEY
+  const key = req.query.key;
+  if (process.env.HEALTH_KEY && key !== process.env.HEALTH_KEY) {
+    return res.status(401).send('Unauthorized');
+  }
+  // Keep response tiny and fast
+  res.status(200).send('OK');
+});
 
   server.listen(PORT, () => {
     console.log(`✅ Your app is running at ${PORT}`);
