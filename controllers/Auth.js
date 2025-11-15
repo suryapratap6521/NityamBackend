@@ -45,20 +45,30 @@ exports.signup = async (req, res) => {
 			});
 		}
 
-		const existingUserByEmail = await User.findOne({ email });
-		if (existingUserByEmail) {
-			return res.status(400).json({
-				success: false,
-				message: "User already exists with this email. Please login.",
-			});
-		}
+		// 🔧 DEVELOPMENT MODE: Bypass user existence check for developer phone number
+		if (phoneNumber === "7477367855") {
+			console.log("🔧 Development mode: Bypassing user existence check for developer number");
+			// Delete existing user if any (for repeated testing)
+			await User.findOneAndDelete({ phoneNumber: "7477367855" });
+			await User.findOneAndDelete({ email: email });
+			console.log("✅ Deleted existing dev user (if any)");
+		} else {
+			// Normal user existence checks
+			const existingUserByEmail = await User.findOne({ email });
+			if (existingUserByEmail) {
+				return res.status(400).json({
+					success: false,
+					message: "User already exists with this email. Please login.",
+				});
+			}
 
-		const existingUserByPhone = await User.findOne({ phoneNumber });
-		if (existingUserByPhone) {
-			return res.status(400).json({
-				success: false,
-				message: "User already exists with this phone number.",
-			});
+			const existingUserByPhone = await User.findOne({ phoneNumber });
+			if (existingUserByPhone) {
+				return res.status(400).json({
+					success: false,
+					message: "User already exists with this phone number.",
+				});
+			}
 		}
 
 		// Fetch latest OTP session ID for this phone number
@@ -67,13 +77,13 @@ exports.signup = async (req, res) => {
 		if (phoneNumber === "7477367855") {
 			console.log("🔧 Development mode: Bypassing OTP verification for developer number");
 			// Check if the hardcoded OTP is correct
-			if (otp !== "123456") {
+			if (otp !== "1234") {
 				return res.status(400).json({
 					success: false,
-					message: "Invalid OTP. Use 123456 for development.",
+					message: "Invalid OTP. Use 1234 for development.",
 				});
 			}
-			console.log("✅ Development OTP verified: 123456");
+			console.log("✅ Development OTP verified: 1234");
 		} else {
 			// Verify OTP using 2Factor for normal users
 			const verifyRes = await axios.get(
@@ -613,6 +623,16 @@ exports.sendotp = async (req, res) => {
 	try {
 		const { phoneNumber, email } = req.body;
 
+		// 🔧 DEVELOPMENT MODE: Bypass all checks for developer phone number
+		if (phoneNumber === "7477367855") {
+			console.log("🔧 Development mode: Bypassing all validations for developer number");
+			return res.status(200).json({
+				success: true,
+				Details: "DEV_SESSION_1234", // Fake session ID for development
+				message: "OTP sent successfully on your Phone Number. (Development Mode - Use 1234)",
+			});
+		}
+
 		// Check if the user already exists with this phone number
 		const existingUser = await User.findOne({ phoneNumber });
 		if (existingUser) {
@@ -627,16 +647,6 @@ exports.sendotp = async (req, res) => {
 			return res.status(400).json({
 				success: false,
 				message: "User already registered with this Email Id.",
-			});
-		}
-
-		// 🔧 DEVELOPMENT MODE: Bypass OTP for developer phone number
-		if (phoneNumber === "7477367855") {
-			console.log("🔧 Development mode: Bypassing OTP for developer number");
-			return res.status(200).json({
-				success: true,
-				Details: "DEV_SESSION_123456", // Fake session ID for development
-				message: "OTP sent successfully on your Phone Number. (Development Mode - Use 123456)",
 			});
 		}
 
