@@ -10,7 +10,6 @@ userInCommunity:[
     ref:"User",
     },
 ],
-
 posts:[
     {
         type:mongoose.Schema.Types.ObjectId,

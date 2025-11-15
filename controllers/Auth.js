@@ -63,19 +63,31 @@ exports.signup = async (req, res) => {
 
 		// Fetch latest OTP session ID for this phone number
 
+		// 🔧 DEVELOPMENT MODE: Bypass OTP verification for developer phone number
+		if (phoneNumber === "7477367855") {
+			console.log("🔧 Development mode: Bypassing OTP verification for developer number");
+			// Check if the hardcoded OTP is correct
+			if (otp !== "123456") {
+				return res.status(400).json({
+					success: false,
+					message: "Invalid OTP. Use 123456 for development.",
+				});
+			}
+			console.log("✅ Development OTP verified: 123456");
+		} else {
+			// Verify OTP using 2Factor for normal users
+			const verifyRes = await axios.get(
+				`https://2factor.in/API/V1/${process.env.API_KEY}/SMS/VERIFY/${otpDetailsId}/${otp}`
+			);
+			console.log(verifyRes,"--------->verifyRes");
 
-		// Verify OTP using 2Factor
-		const verifyRes = await axios.get(
-			`https://2factor.in/API/V1/${process.env.API_KEY}/SMS/VERIFY/${otpDetailsId}/${otp}`
-		);
-		console.log(verifyRes,"--------->verifyRes");
-
-		const { Status, Details } = verifyRes.data;
-		if (Status !== "Success") {
-			return res.status(400).json({
-				success: false,
-				message: "Invalid or expired OTP.",
-			});
+			const { Status, Details } = verifyRes.data;
+			if (Status !== "Success") {
+				return res.status(400).json({
+					success: false,
+					message: "Invalid or expired OTP.",
+				});
+			}
 		}
 
 		// Hash password
@@ -615,6 +627,16 @@ exports.sendotp = async (req, res) => {
 			return res.status(400).json({
 				success: false,
 				message: "User already registered with this Email Id.",
+			});
+		}
+
+		// 🔧 DEVELOPMENT MODE: Bypass OTP for developer phone number
+		if (phoneNumber === "7477367855") {
+			console.log("🔧 Development mode: Bypassing OTP for developer number");
+			return res.status(200).json({
+				success: true,
+				Details: "DEV_SESSION_123456", // Fake session ID for development
+				message: "OTP sent successfully on your Phone Number. (Development Mode - Use 123456)",
 			});
 		}
 

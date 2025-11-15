@@ -18,6 +18,7 @@
   const Message = require("./models/Message");
   const Chat = require("./models/Chat");
   const User = require("./models/User");
+  
 
   // 🌐 Load env
   dotenv.config();
@@ -31,10 +32,8 @@ const allowedOrigins = [
   "http://localhost:3001",
   "http://localhost:3002",
   "https://truepadosi.com",
-   "https://www.truepadosi.com",
+  "https://www.truepadosi.com",
   "https://nityam-frontend-lemon.vercel.app",
-  
-  
 ];
 
 app.set('trust proxy', 1);
@@ -55,8 +54,6 @@ app.use(cors({
   credentials: true, // Required for sending cookiesss
   
 }));
-
-
 
   app.use(express.json());
   app.use(cookieParser());

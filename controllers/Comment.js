@@ -1,4 +1,6 @@
-const Post =require("../models/Post");
+const Post = require("../models/Post");
+const User = require("../models/User");
+const Notification = require("../models/Notification");
 exports.commentOnPost = async (req, res) => {
   try {
     const { postId, text } = req.body;
@@ -21,8 +23,43 @@ exports.commentOnPost = async (req, res) => {
     .populate({
       path: "pollOptions.votes",
       select: "firstName lastName email image",
-    });
+    })
+    .populate("postByUser", "firstName lastName image");
+    
     console.log("--postcomment",post.comments);
+
+    // ✅ Create notification when someone comments (but not on their own post)
+    if (post.postByUser._id.toString() !== userId.toString()) {
+      const commenter = await User.findById(userId).select("firstName lastName image");
+      
+      const notification = await Notification.create({
+        recipient: post.postByUser._id,
+        sender: userId,
+        post: postId,
+        type: "comment",
+        message: `${commenter.firstName} ${commenter.lastName} commented on your post: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`,
+      });
+
+      // ✅ Emit real-time notification to post owner
+      global.io.to(post.postByUser._id.toString()).emit("newNotification", {
+        _id: notification._id,
+        sender: {
+          _id: commenter._id,
+          firstName: commenter.firstName,
+          lastName: commenter.lastName,
+          image: commenter.image,
+        },
+        post: {
+          _id: postId,
+          title: post.title || post.content?.substring(0, 50),
+          postType: post.postType
+        },
+        type: "comment",
+        message: notification.message,
+        read: false,
+        createdAt: notification.createdAt,
+      });
+    }
 
     global.io.emit("comment added", { postId, comments: post.comments });
 
@@ -120,7 +157,43 @@ exports.likeComment = async (req, res) => {
         .populate({
           path: "comments.commentedBy comments.replies.repliedBy comments.replies.replies.repliedBy",
           select: "firstName lastName image",
+        })
+        .populate("postByUser", "firstName lastName image");
+
+      // ✅ Create notification when someone replies (but not to their own comment/reply)
+      const targetOwnerId = replyId ? target.repliedBy._id || target.repliedBy : comment.commentedBy._id || comment.commentedBy;
+      
+      if (targetOwnerId.toString() !== userId.toString()) {
+        const replier = await User.findById(userId).select("firstName lastName image");
+        
+        const notification = await Notification.create({
+          recipient: targetOwnerId,
+          sender: userId,
+          post: postId,
+          type: "reply",
+          message: `${replier.firstName} ${replier.lastName} replied to your comment: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`,
         });
+
+        // ✅ Emit real-time notification
+        global.io.to(targetOwnerId.toString()).emit("newNotification", {
+          _id: notification._id,
+          sender: {
+            _id: replier._id,
+            firstName: replier.firstName,
+            lastName: replier.lastName,
+            image: replier.image,
+          },
+          post: {
+            _id: postId,
+            title: updatedPost.title || updatedPost.content?.substring(0, 50),
+            postType: updatedPost.postType
+          },
+          type: "reply",
+          message: notification.message,
+          read: false,
+          createdAt: notification.createdAt,
+        });
+      }
 
       global.io.emit("comment updated", {
         postId,

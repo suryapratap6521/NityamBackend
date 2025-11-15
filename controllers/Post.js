@@ -48,7 +48,7 @@ exports.createPost = async (req, res) => {
 
     // Event post
     else if (postType === "event") {
-      if (!location || !startDate || !endDate || !hostedBy) {
+      if (!location || !startDate || !endDate) {
         return res.status(400).json({ error: "Missing event details." });
       }
       postData = {
@@ -122,17 +122,28 @@ exports.createPost = async (req, res) => {
     }));
 
     if (notifications.length > 0) {
-      await Notification.insertMany(notifications);
+      const createdNotifications = await Notification.insertMany(notifications);
 
-      global.io.to(members.map(m => m.toString())).emit("newNotification", {
-        sender: {
-          _id: userDetails._id,
-          firstName: userDetails.firstName,
-          lastName: userDetails.lastName,
-          image: userDetails.image,
-        },
-        post,
-        notifications,
+      // ✅ Emit notification to each member individually with full notification data
+      createdNotifications.forEach((notification, index) => {
+        global.io.to(members[index].toString()).emit("newNotification", {
+          _id: notification._id,
+          sender: {
+            _id: userDetails._id,
+            firstName: userDetails.firstName,
+            lastName: userDetails.lastName,
+            image: userDetails.image,
+          },
+          post: {
+            _id: post._id,
+            title: title || content?.substring(0, 50),
+            postType: postType
+          },
+          type: postType,
+          message: notification.message,
+          read: false,
+          createdAt: notification.createdAt,
+        });
       });
     }
 

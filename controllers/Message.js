@@ -40,12 +40,40 @@ exports.sendMessage = async (req, res) => {
 
     await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
 
-    // ✅ Emit via Socket.IO (real-time)
+    // ✅ Emit via Socket.IO (real-time) & Create notifications for each recipient
     const io = global.io;
     if (io && message.chat && message.chat.users) {
-      message.chat.users.forEach((user) => {
+      const sender = await User.findById(req.user.id).select("firstName lastName image");
+      
+      message.chat.users.forEach(async (user) => {
         if (user._id.toString() !== req.user.id.toString()) {
+          // Emit real-time message
           io.to(user._id.toString()).emit("message recieved", message);
+          
+          // ✅ Create notification for direct message
+          const notification = await Notification.create({
+            recipient: user._id,
+            sender: req.user.id,
+            chat: chatId,
+            type: "chat",
+            message: `${sender.firstName} ${sender.lastName} sent you a message: "${content ? content.substring(0, 30) : 'Shared a post'}${content && content.length > 30 ? '...' : ''}"`,
+          });
+
+          // ✅ Emit notification
+          io.to(user._id.toString()).emit("newNotification", {
+            _id: notification._id,
+            sender: {
+              _id: sender._id,
+              firstName: sender.firstName,
+              lastName: sender.lastName,
+              image: sender.image,
+            },
+            chat: chatId,
+            type: "chat",
+            message: notification.message,
+            read: false,
+            createdAt: notification.createdAt,
+          });
         }
       });
     }
