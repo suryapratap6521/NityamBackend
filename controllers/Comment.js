@@ -299,10 +299,16 @@ exports.deleteComment = async (req, res) => {
     // 5️⃣ Save post after removal
     await post.save();
 
-    // 6️⃣ Emit socket event (optional)
-    global.io.emit("comment deleted", { postId, commentId });
+    // 6️⃣ Fetch updated post with populated comments
+    const updatedPost = await Post.findById(postId).populate({
+      path: "comments.commentedBy comments.replies.repliedBy comments.replies.replies.repliedBy",
+      select: "firstName lastName image",
+    });
 
-    res.status(200).json({ success: true, message: "Comment deleted successfully" });
+    // 7️⃣ Emit socket event with updated comments
+    global.io.emit("comment deleted", { postId, comments: updatedPost.comments });
+
+    res.status(200).json({ success: true, message: "Comment deleted successfully", comments: updatedPost.comments });
   } catch (err) {
     console.error("❌ Error in deleteComment:", err);
     res.status(500).json({ success: false, message: "Server error in deleteComment" });
@@ -343,9 +349,15 @@ exports.deleteReply = async (req, res) => {
 
     await post.save();
 
-    global.io.emit("reply deleted", { postId, commentId, replyId });
+    // Fetch updated post with populated comments
+    const updatedPost = await Post.findById(postId).populate({
+      path: "comments.commentedBy comments.replies.repliedBy comments.replies.replies.repliedBy",
+      select: "firstName lastName image",
+    });
 
-    res.status(200).json({ success: true, message: "Reply deleted" });
+    global.io.emit("reply deleted", { postId, comments: updatedPost.comments });
+
+    res.status(200).json({ success: true, message: "Reply deleted", comments: updatedPost.comments });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error in deleteReply" });
