@@ -60,7 +60,14 @@ exports.likePost = async (req, res) => {
     }
 
     const updatedPost = await Post.findById(postId)
-  .populate("postByUser", "firstName lastName email image city community")
+  .populate({
+    path: "postByUser",
+    select: "firstName lastName email image city community",
+    populate: {
+      path: "communityDetails",
+      select: "communityName city community image"
+    }
+  })
   .populate("comments.commentedBy", "firstName lastName image")
   .populate("comments.replies.repliedBy", "firstName lastName image")
   .populate("likes")

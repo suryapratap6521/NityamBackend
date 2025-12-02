@@ -147,23 +147,27 @@ exports.createPost = async (req, res) => {
       });
     }
 
+    // ✅ Populate post with user details and communityDetails before returning
+    const populatedPost = await Post.findById(post._id)
+      .populate({
+        path: 'postByUser',
+        select: 'firstName lastName email image',
+        populate: {
+          path: 'communityDetails',
+          select: 'communityName city community image'
+        }
+      });
+
     // ✅ Emit real-time newPost to all users (frontend listener updates feed)
     global.io.emit("newPost", {
-      ...post._doc,
+      ...populatedPost._doc,
       type: 0, // mark it as post (not ad)
-      postByUser: {
-        _id: userDetails._id,
-        firstName: userDetails.firstName,
-        lastName: userDetails.lastName,
-        image: userDetails.image,
-        communityDetails: userDetails.communityDetails,
-      },
     });
 
     return res.status(200).json({
       success: true,
       message: "Successfully created the post",
-      postData: post,
+      post: populatedPost,
     });
   } catch (error) {
     console.error("Error creating post:", error);
@@ -441,7 +445,14 @@ exports.getPostByIdForPreview = async (req, res) => {
     }
 
     const post = await Post.findById(postId)
-      .populate("postByUser", "firstName lastName image")
+      .populate({
+        path: "postByUser",
+        select: "firstName lastName image",
+        populate: {
+          path: "communityDetails",
+          select: "communityName city community image"
+        }
+      })
       .populate("likes", "_id")
       .lean();
 
@@ -474,7 +485,14 @@ exports.getPostByIdForPreview = async (req, res) => {
 exports.getPostById = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
-      .populate("postByUser", "firstName lastName image");
+      .populate({
+        path: "postByUser",
+        select: "firstName lastName image",
+        populate: {
+          path: "communityDetails",
+          select: "communityName city community image"
+        }
+      });
     
     if (!post) {
       return res.status(404).json({ success: false, message: "Post not found" });
@@ -751,10 +769,21 @@ exports.updatePost = async (req, res) => {
 
     await post.save();
 
+    // ✅ Populate post with user details and communityDetails before returning
+    const populatedPost = await Post.findById(post._id)
+      .populate({
+        path: 'postByUser',
+        select: 'firstName lastName email image',
+        populate: {
+          path: 'communityDetails',
+          select: 'communityName city community image'
+        }
+      });
+
     return res.status(200).json({
       success: true,
       message: "Post updated successfully.",
-      updatedPost: post,
+      updatedPost: populatedPost,
     });
 
   } catch (error) {
@@ -773,7 +802,14 @@ exports.getEventById = async (req, res) => {
     const { id } = req.params; // using route parameter
     // Ensure that the post type is "event"
     const event = await Post.findOne({ _id: id, postType: 'event' })
-      .populate('postByUser', 'firstName lastName email')
+      .populate({
+        path: 'postByUser',
+        select: 'firstName lastName email image',
+        populate: {
+          path: 'communityDetails',
+          select: 'communityName city community image'
+        }
+      })
       .exec();
 
     if (!event) {

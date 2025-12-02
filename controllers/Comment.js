@@ -24,7 +24,14 @@ exports.commentOnPost = async (req, res) => {
       path: "pollOptions.votes",
       select: "firstName lastName email image",
     })
-    .populate("postByUser", "firstName lastName image");
+    .populate({
+      path: "postByUser",
+      select: "firstName lastName image",
+      populate: {
+        path: "communityDetails",
+        select: "communityName city community image"
+      }
+    });
     
     console.log("--postcomment",post.comments);
 
@@ -158,7 +165,14 @@ exports.likeComment = async (req, res) => {
           path: "comments.commentedBy comments.replies.repliedBy comments.replies.replies.repliedBy",
           select: "firstName lastName image",
         })
-        .populate("postByUser", "firstName lastName image");
+        .populate({
+          path: "postByUser",
+          select: "firstName lastName image",
+          populate: {
+            path: "communityDetails",
+            select: "communityName city community image"
+          }
+        });
 
       // ✅ Create notification when someone replies (but not to their own comment/reply)
       const targetOwnerId = replyId ? target.repliedBy._id || target.repliedBy : comment.commentedBy._id || comment.commentedBy;
