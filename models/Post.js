@@ -99,6 +99,22 @@ const postSchema = new mongoose.Schema({
   endDate: Date,
   location: String,
   hostedBy: String,
+  attendees: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  }],
+  maxAttendees: {
+    type: Number,
+    default: null, // null means unlimited
+  },
+  category: {
+    type: String,
+    trim: true,
+  },
+  price: {
+    type: String,
+    default: "Free",
+  },
 
   // Poll-specific
   pollOptions: {

@@ -493,7 +493,8 @@ exports.getPostById = async (req, res) => {
 
 exports.getCommunityEvents = async (req, res) => {
   try {
-      const userId = req.user.id; // Get user ID from authentication middleware
+      const userId = req.user.id;
+      const { filter } = req.query; // 'upcoming', 'today', 'thisweek', 'myevents'
       
       // Find communities where the user is a member
       const communities = await Community.find({ userInCommunity: userId });
@@ -505,27 +506,136 @@ exports.getCommunityEvents = async (req, res) => {
       // Extract all post IDs from the user's communities
       const postIds = communities.flatMap(community => community.posts);
       
-      // if (!postIds.length) {
-      //     return res.status(404).json({ message: "No posts found in user's communities." });
-      // }
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const endOfWeek = new Date(today);
+      endOfWeek.setDate(endOfWeek.getDate() + 7);
 
-      // Find posts with postType "events"
+      let dateFilter = {};
+
+      // Apply time-based filters
+      if (filter === 'today') {
+        dateFilter = {
+          startDate: {
+            $gte: today,
+            $lt: tomorrow
+          }
+        };
+      } else if (filter === 'thisweek') {
+        dateFilter = {
+          startDate: {
+            $gte: today,
+            $lt: endOfWeek
+          }
+        };
+      } else if (filter === 'myevents') {
+        // Only events created by this user
+        const myEvents = await Post.find({
+          _id: { $in: postIds },
+          postType: "event",
+          postByUser: userId
+        })
+          .populate("postByUser", "firstName lastName email")
+          .populate("attendees", "firstName lastName email")
+          .sort({ startDate: 1 });
+        
+        return res.status(200).json(myEvents);
+      } else {
+        // Default 'upcoming' - all future events
+        dateFilter = {
+          startDate: { $gte: now }
+        };
+      }
+
+      // Find events with the applied filters
       const events = await Post.find({
-        _id: { $in: postIds }, // Get posts by extracted post IDs
-        postType: "event"
+        _id: { $in: postIds },
+        postType: "event",
+        ...dateFilter
       })
-        .populate("postByUser", "name")
-        .sort({ createdAt: -1 }); // Corrected syntax for sorting
-       // Populate user name if needed
-
-      // if (!events.length) {
-      //     return res.status(404).json({ message: "No events found in user's communities." });
-      // }
+        .populate("postByUser", "firstName lastName email")
+        .populate("attendees", "firstName lastName email")
+        .sort({ startDate: 1 });
 
       res.status(200).json(events);
   } catch (error) {
       console.error("Error fetching community events:", error);
       res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// Book/Join an event
+exports.bookEvent = async (req, res) => {
+  try {
+    const { postId } = req.body;
+    const userId = req.user.id;
+
+    if (!postId) {
+      return res.status(400).json({ success: false, message: "Post ID is required" });
+    }
+
+    const event = await Post.findOne({ _id: postId, postType: 'event' });
+
+    if (!event) {
+      return res.status(404).json({ success: false, message: "Event not found" });
+    }
+
+    // Check if user is the event creator
+    if (event.postByUser.toString() === userId) {
+      return res.status(400).json({ success: false, message: "You cannot book your own event" });
+    }
+
+    // Check if already booked
+    const isAlreadyBooked = event.attendees.some(attendee => attendee.toString() === userId);
+
+    if (isAlreadyBooked) {
+      // Unbooking - remove from attendees
+      event.attendees = event.attendees.filter(attendee => attendee.toString() !== userId);
+      await event.save();
+
+      return res.status(200).json({ 
+        success: true, 
+        message: "Event booking cancelled",
+        isBooked: false,
+        attendeesCount: event.attendees.length
+      });
+    } else {
+      // Check if event is full
+      if (event.maxAttendees && event.attendees.length >= event.maxAttendees) {
+        return res.status(400).json({ success: false, message: "Event is fully booked" });
+      }
+
+      // Booking - add to attendees
+      event.attendees.push(userId);
+      await event.save();
+
+      // Create notification for event creator
+      const Notification = require("../models/Notification");
+      const User = require("../models/User");
+      
+      const booker = await User.findById(userId);
+      
+      await Notification.create({
+        recipient: event.postByUser,
+        sender: userId,
+        type: 'event_booking',
+        message: `${booker.firstName} ${booker.lastName} has booked your event "${event.title}"`,
+        postId: postId,
+        read: false
+      });
+
+      return res.status(200).json({ 
+        success: true, 
+        message: "Event booked successfully",
+        isBooked: true,
+        attendeesCount: event.attendees.length
+      });
+    }
+  } catch (error) {
+    console.error("Error booking event:", error);
+    return res.status(500).json({ success: false, message: "Server error", error });
   }
 };
 
