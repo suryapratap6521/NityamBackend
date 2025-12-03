@@ -535,10 +535,14 @@ exports.getCommunityEvents = async (req, res) => {
 
       // Apply time-based filters
       if (filter === 'today') {
+        // Only show events that are happening RIGHT NOW or will happen later TODAY
         dateFilter = {
           startDate: {
-            $gte: today,
-            $lt: tomorrow
+            $gte: now,  // Must not have started yet OR currently happening
+            $lt: tomorrow  // Must start before tomorrow
+          },
+          endDate: {
+            $gte: now  // Must not have ended yet
           }
         };
       } else if (filter === 'thisweek') {
