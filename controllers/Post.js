@@ -600,11 +600,6 @@ exports.bookEvent = async (req, res) => {
       return res.status(404).json({ success: false, message: "Event not found" });
     }
 
-    // Check if user is the event creator
-    if (event.postByUser.toString() === userId) {
-      return res.status(400).json({ success: false, message: "You cannot book your own event" });
-    }
-
     // Check if already booked
     const isAlreadyBooked = event.attendees.some(attendee => attendee.toString() === userId);
 
