@@ -612,11 +612,15 @@ exports.bookEvent = async (req, res) => {
       event.attendees = event.attendees.filter(attendee => attendee.toString() !== userId);
       await event.save();
 
+      // Populate attendees before returning
+      const updatedEvent = await Post.findById(postId).populate("attendees", "firstName lastName email image");
+
       return res.status(200).json({ 
         success: true, 
         message: "Event booking cancelled",
         isBooked: false,
-        attendeesCount: event.attendees.length
+        attendeesCount: updatedEvent.attendees.length,
+        attendees: updatedEvent.attendees
       });
     } else {
       // Check if event is full
@@ -643,11 +647,15 @@ exports.bookEvent = async (req, res) => {
         read: false
       });
 
+      // Populate attendees before returning
+      const updatedEvent = await Post.findById(postId).populate("attendees", "firstName lastName email image");
+
       return res.status(200).json({ 
         success: true, 
         message: "Event booked successfully",
         isBooked: true,
-        attendeesCount: event.attendees.length
+        attendeesCount: updatedEvent.attendees.length,
+        attendees: updatedEvent.attendees
       });
     }
   } catch (error) {
