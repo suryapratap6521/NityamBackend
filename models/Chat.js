@@ -17,7 +17,10 @@ unreadCounts: [
     count: { type: Number, default: 0 }
   }
 ],
-
+  leftMembers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  }],
     groupAdmin: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",

@@ -14,17 +14,40 @@ exports.sendMessage = async (req, res) => {
     });
   }
 
-  const newMessage = {
-    sender: req.user.id,
-    content: content || "",
-    chat: chatId,
-  };
-
-  if (sharedPostId) {
-    newMessage.sharedPost = sharedPostId;
-  }
-
   try {
+    const chat = await Chat.findById(chatId);
+    
+    if (!chat) {
+      return res.status(404).json({
+        success: false,
+        message: "Chat not found",
+      });
+    }
+
+    if (chat.isGroupChat && chat.leftMembers && chat.leftMembers.includes(req.user.id)) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot send messages after leaving the group. You have read-only access.",
+      });
+    }
+
+    if (!chat.users.includes(req.user.id)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not a member of this chat",
+      });
+    }
+
+    const newMessage = {
+      sender: req.user.id,
+      content: content || "",
+      chat: chatId,
+    };
+
+    if (sharedPostId) {
+      newMessage.sharedPost = sharedPostId;
+    }
+
     let message = await Message.create(newMessage);
 
     message = await message.populate([
@@ -94,20 +117,42 @@ exports.sendMessage = async (req, res) => {
 
     exports.allMessages = async (req, res) => {
         try {
-         const messages=await Message.find({ chat: req.params.chatId })
+         const chat = await Chat.findById(req.params.chatId);
+         
+         if (!chat) {
+           return res.status(404).json({
+             success: false,
+             message: "Chat not found"
+           });
+         }
+         
+         const userId = req.user.id;
+         const isActiveMember = chat.users.includes(userId);
+         const isLeftMember = chat.leftMembers && chat.leftMembers.includes(userId);
+         
+         if (!isActiveMember && !isLeftMember) {
+           return res.status(403).json({
+             success: false,
+             message: "You do not have access to this chat"
+           });
+         }
+         
+         const messages = await Message.find({ chat: req.params.chatId })
          .populate("sender")
          .populate("chat")
-         .exec()
+         .exec();
+         
          return res.status(200).json({
-             success:true,
-             json:"All messages",
-             messages
-         })
+             success: true,
+             message: "All messages",
+             messages,
+             isLeftMember
+         });
         } catch (error) {
          return res.status(500).json({
-             success:false,
-             json:"Internal server error"
-         })
+             success: false,
+             message: "Internal server error"
+         });
         }
      };
 

@@ -18,6 +18,10 @@
   ref: "Post",
   default: null,
 },
+        isSystemMessage: {
+            type: Boolean,
+            default: false,
+        },
         status: {
             type: String,
             enum: ["sent", "delivered", "seen"],

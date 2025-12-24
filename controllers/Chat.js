@@ -1,4 +1,6 @@
 const Chat = require("../models/Chat");
+const Message = require("../models/Message");
+const User = require("../models/User");
 
 exports.accessChat = async (req, res) => {
   const { userId } = req.body;
@@ -68,7 +70,7 @@ exports.accessChat = async (req, res) => {
 
 exports.fetchChats = async (req, res) => {
     try {
-        const result = await Chat.find({ users: req.user.id })
+        const activeChats = await Chat.find({ users: req.user.id })
             .populate({
                 path: 'users',
                 select: '-password'
@@ -80,13 +82,42 @@ exports.fetchChats = async (req, res) => {
                     select: 'firstName lastName image communityDetails email'
                 }
             })
-            .sort({ updatedAt: -1 })
-            .populate('groupAdmin', '-password');
+            .populate('groupAdmin', '-password')
+            .populate('leftMembers', 'firstName lastName image');
+
+        const leftChats = await Chat.find({ 
+            leftMembers: req.user.id,
+            users: { $ne: req.user.id }
+        })
+            .populate({
+                path: 'users',
+                select: '-password'
+            })
+            .populate({
+                path: 'latestMessage',
+                populate: {
+                    path: 'sender',
+                    select: 'firstName lastName image communityDetails email'
+                }
+            })
+            .populate('groupAdmin', '-password')
+            .populate('leftMembers', 'firstName lastName image');
+
+        const allChats = [...activeChats, ...leftChats].sort((a, b) => 
+            new Date(b.updatedAt) - new Date(a.updatedAt)
+        );
+
+        const chatsWithStatus = allChats.map(chat => ({
+            ...chat.toObject(),
+            isLeftMember: chat.leftMembers && chat.leftMembers.some(
+                member => member._id.toString() === req.user.id
+            )
+        }));
 
         return res.status(200).json({
             success: true,
             message: 'Fetching all chats',
-            chat: result
+            chat: chatsWithStatus
         });
     } catch (error) {
         console.error('Error fetching chats:', error);
@@ -243,6 +274,168 @@ exports.removeFromGroup = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Internal server error in removing the user from the group",
+        });
+    }
+};
+
+exports.leaveGroup = async (req, res) => {
+    try {
+        const { chatId } = req.body;
+        const userId = req.user.id;
+
+        if (!chatId) {
+            return res.status(400).json({
+                success: false,
+                message: "chatId is required",
+            });
+        }
+
+        const chat = await Chat.findById(chatId);
+        
+        if (!chat) {
+            return res.status(404).json({
+                success: false,
+                message: "Chat not found",
+            });
+        }
+
+        if (!chat.isGroupChat) {
+            return res.status(400).json({
+                success: false,
+                message: "Leave group is only available for group chats",
+            });
+        }
+
+        if (!chat.users.includes(userId)) {
+            return res.status(400).json({
+                success: false,
+                message: "You are not a member of this group",
+            });
+        }
+
+        if (chat.leftMembers && chat.leftMembers.includes(userId)) {
+            return res.status(400).json({
+                success: false,
+                message: "You have already left this group",
+            });
+        }
+
+        const user = await User.findById(userId).select("firstName lastName");
+        
+        const updatedChat = await Chat.findByIdAndUpdate(
+            chatId,
+            {
+                $pull: { users: userId },
+                $addToSet: { leftMembers: userId },
+            },
+            { new: true }
+        )
+        .populate("users", "-password")
+        .populate("groupAdmin", "-password")
+        .populate("leftMembers", "firstName lastName image");
+
+        if (!updatedChat) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to leave group",
+            });
+        }
+
+        const systemMessage = await Message.create({
+            sender: userId,
+            content: `${user.firstName} ${user.lastName} left the group`,
+            chat: chatId,
+            isSystemMessage: true,
+            status: "sent",
+        });
+
+        await Chat.findByIdAndUpdate(chatId, { latestMessage: systemMessage._id });
+
+        const io = global.io;
+        if (io && updatedChat.users) {
+            updatedChat.users.forEach((groupUser) => {
+                io.to(groupUser._id.toString()).emit("user left group", {
+                    chatId,
+                    userId,
+                    message: systemMessage,
+                    updatedChat,
+                });
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Left group successfully",
+            data: updatedChat,
+            systemMessage,
+        });
+    } catch (error) {
+        console.error("Leave group error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while leaving the group",
+        });
+    }
+};
+
+exports.deleteGroup = async (req, res) => {
+    try {
+        const { chatId } = req.body;
+        const userId = req.user.id;
+
+        if (!chatId) {
+            return res.status(400).json({
+                success: false,
+                message: "chatId is required",
+            });
+        }
+
+        const chat = await Chat.findById(chatId);
+        
+        if (!chat) {
+            return res.status(404).json({
+                success: false,
+                message: "Chat not found",
+            });
+        }
+
+        if (!chat.isGroupChat) {
+            return res.status(400).json({
+                success: false,
+                message: "Delete group is only available for group chats",
+            });
+        }
+
+        if (chat.groupAdmin.toString() !== userId) {
+            return res.status(403).json({
+                success: false,
+                message: "Only group admin can delete the group",
+            });
+        }
+
+        await Message.deleteMany({ chat: chatId });
+        
+        await Chat.findByIdAndDelete(chatId);
+
+        const io = global.io;
+        if (io && chat.users) {
+            chat.users.forEach((groupUser) => {
+                io.to(groupUser._id.toString()).emit("group deleted", {
+                    chatId,
+                    message: "This group has been deleted by the admin",
+                });
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Group and all messages deleted successfully",
+        });
+    } catch (error) {
+        console.error("Delete group error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while deleting the group",
         });
     }
 };
