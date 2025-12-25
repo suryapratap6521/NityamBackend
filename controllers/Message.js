@@ -61,7 +61,30 @@ exports.sendMessage = async (req, res) => {
       select: "firstName lastName image email",
     });
 
-    await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
+    // Increment unread count for all users except sender
+    // Reuse existing chat object from line 18
+    const updatedUnreadCounts = chat.unreadCounts || [];
+    
+    chat.users.forEach((userId) => {
+      if (userId.toString() !== req.user.id.toString()) {
+        const existingUnread = updatedUnreadCounts.find(uc => uc.user.toString() === userId.toString());
+        if (existingUnread) {
+          existingUnread.count += 1;
+        } else {
+          updatedUnreadCounts.push({ user: userId, count: 1 });
+        }
+      }
+    });
+
+    await Chat.findByIdAndUpdate(chatId, { 
+      latestMessage: message,
+      unreadCounts: updatedUnreadCounts 
+    });
+
+    // Get updated chat with unread counts
+    const updatedChat = await Chat.findById(chatId)
+      .populate("users", "firstName lastName image")
+      .populate("latestMessage");
 
     // ✅ Emit via Socket.IO (real-time) & Create notifications for each recipient
     const io = global.io;
@@ -70,8 +93,11 @@ exports.sendMessage = async (req, res) => {
       
       message.chat.users.forEach(async (user) => {
         if (user._id.toString() !== req.user.id.toString()) {
-          // Emit real-time message
-          io.to(user._id.toString()).emit("message recieved", message);
+          // Emit real-time message with updated chat
+          io.to(user._id.toString()).emit("message recieved", {
+            message: message,
+            chat: updatedChat
+          });
           
           // ✅ Create notification for direct message
           const notification = await Notification.create({

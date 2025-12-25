@@ -157,7 +157,42 @@ exports.createGroupChat = async (req, res) => {
             .populate("users", "-password")
             .populate("groupAdmin", "-password");
 
-        res.status(200).json(fullGroupChat);
+        // Create system message for group creation
+        const Message = require("../models/Message");
+        const User = require("../models/User");
+        const creator = await User.findById(groupAdmin).select("firstName lastName");
+        
+        const systemMessage = await Message.create({
+            sender: groupAdmin,
+            content: `${creator.firstName} ${creator.lastName} created the group "${fullGroupChat.chatName}"`,
+            chat: groupChat._id,
+            isSystemMessage: true,
+        });
+
+        const populatedSystemMessage = await Message.findById(systemMessage._id)
+            .populate("sender", "firstName lastName image")
+            .populate("chat");
+
+        // Update chat with latest message
+        await Chat.findByIdAndUpdate(groupChat._id, { latestMessage: populatedSystemMessage });
+
+        // Get updated chat with latest message
+        const updatedGroupChat = await Chat.findOne({ _id: groupChat._id })
+            .populate("users", "-password")
+            .populate("groupAdmin", "-password")
+            .populate("latestMessage");
+
+        const io = global.io;
+        if (io && updatedGroupChat.users) {
+            updatedGroupChat.users.forEach((user) => {
+                io.to(user._id.toString()).emit("new group created", {
+                    chat: updatedGroupChat,
+                    message: populatedSystemMessage
+                });
+            });
+        }
+
+        res.status(200).json(updatedGroupChat);
     } catch (error) {
         console.error(error);
         return res.status(500).json({
@@ -208,6 +243,21 @@ exports.addToGroup = async (req, res) => {
             });
         }
 
+        const chat = await Chat.findById(chatId);
+        if (!chat) {
+            return res.status(404).json({
+                success: false,
+                message: "Chat not found",
+            });
+        }
+
+        if (chat.users.includes(userId)) {
+            return res.status(400).json({
+                success: false,
+                message: "User already in group",
+            });
+        }
+
         const added = await Chat.findByIdAndUpdate(chatId,
             {
                 $push: { users: userId },
@@ -217,16 +267,43 @@ exports.addToGroup = async (req, res) => {
             .populate("groupAdmin", "-password");
 
         if (!added) {
-            return res.status(400).json({
+            return res.status(404).json({
                 success: false,
-                message: "There was a problem adding the user to the group",
+                message: "Chat not found",
             });
         }
-        
+
+        const Message = require("../models/Message");
+        const adderUser = await require("../models/User").findById(req.user.id);
+        const addedUser = await require("../models/User").findById(userId);
+
+        const systemMessage = await Message.create({
+            sender: req.user.id,
+            content: `${addedUser.firstName} ${addedUser.lastName} was added by ${adderUser.firstName} ${adderUser.lastName}`,
+            chat: chatId,
+            isSystemMessage: true,
+        });
+
+        const populatedMessage = await Message.findById(systemMessage._id)
+            .populate("sender", "firstName lastName image")
+            .populate("chat");
+
+        await Chat.findByIdAndUpdate(chatId, { latestMessage: populatedMessage });
+
+        const io = global.io;
+        if (io && added.users) {
+            added.users.forEach((user) => {
+                io.to(user._id.toString()).emit("user added to group", {
+                    chat: added,
+                    message: populatedMessage,
+                });
+            });
+        }
+
         return res.status(200).json({
             success: true,
             message: "User added successfully",
-            data: added,
+            updatedChat: added
         });
     } catch (error) {
         console.error(error);
@@ -436,6 +513,60 @@ exports.deleteGroup = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Internal server error while deleting the group",
+        });
+    }
+};
+
+exports.resetUnreadCount = async (req, res) => {
+    try {
+        const { chatId } = req.body;
+        const userId = req.user.id;
+
+        if (!chatId) {
+            return res.status(400).json({
+                success: false,
+                message: "chatId is required",
+            });
+        }
+
+        const chat = await Chat.findById(chatId);
+        
+        if (!chat) {
+            return res.status(404).json({
+                success: false,
+                message: "Chat not found",
+            });
+        }
+
+        if (!chat.users.includes(userId)) {
+            return res.status(403).json({
+                success: false,
+                message: "You are not a member of this chat",
+            });
+        }
+
+        const updatedChat = await Chat.findOneAndUpdate(
+            { _id: chatId, "unreadCounts.user": userId },
+            { $set: { "unreadCounts.$.count": 0 } },
+            { new: true }
+        );
+
+        if (!updatedChat) {
+            await Chat.findByIdAndUpdate(
+                chatId,
+                { $push: { unreadCounts: { user: userId, count: 0 } } }
+            );
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Unread count reset successfully",
+        });
+    } catch (error) {
+        console.error("Reset unread count error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while resetting unread count",
         });
     }
 };
