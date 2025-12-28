@@ -1,6 +1,7 @@
 const Chat = require("../models/Chat");
 const Message = require("../models/Message");
 const User = require("../models/User");
+const { uploadFilesToCloudinary } = require("../utils/imageUploader");
 
 exports.accessChat = async (req, res) => {
   const { userId } = req.body;
@@ -146,11 +147,29 @@ exports.createGroupChat = async (req, res) => {
     users.push(groupAdmin);
 
     try {
+        let groupPhotoUrl = null;
+
+        // Handle group photo upload if provided
+        if (req.files && req.files.groupPhoto) {
+            try {
+                const uploadedImage = await uploadFilesToCloudinary(
+                    [req.files.groupPhoto],
+                    "group_photos",
+                    { width: 500, height: 500, crop: "fill" }
+                );
+                groupPhotoUrl = uploadedImage[0].secure_url;
+            } catch (uploadError) {
+                console.error("Group photo upload error:", uploadError);
+                // Continue without photo if upload fails
+            }
+        }
+
         const groupChat = await Chat.create({
             chatName: req.body.name,
             users: users,
             isGroupChat: true,
-            groupAdmin: groupAdmin, // Set groupAdmin to the current user's ObjectId
+            groupAdmin: groupAdmin,
+            groupPhoto: groupPhotoUrl,
         });
 
         const fullGroupChat = await Chat.findOne({ _id: groupChat._id })
@@ -567,6 +586,105 @@ exports.resetUnreadCount = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Internal server error while resetting unread count",
+        });
+    }
+};
+
+exports.updateGroupPhoto = async (req, res) => {
+    try {
+        const { chatId } = req.body;
+        const userId = req.user.id;
+
+        if (!chatId) {
+            return res.status(400).json({
+                success: false,
+                message: "chatId is required",
+            });
+        }
+
+        if (!req.files || !req.files.groupPhoto) {
+            return res.status(400).json({
+                success: false,
+                message: "Group photo is required",
+            });
+        }
+
+        const chat = await Chat.findById(chatId);
+        
+        if (!chat) {
+            return res.status(404).json({
+                success: false,
+                message: "Chat not found",
+            });
+        }
+
+        if (!chat.isGroupChat) {
+            return res.status(400).json({
+                success: false,
+                message: "This operation is only available for group chats",
+            });
+        }
+
+        if (chat.groupAdmin.toString() !== userId) {
+            return res.status(403).json({
+                success: false,
+                message: "Only group admin can update the group photo",
+            });
+        }
+
+        // Upload new photo to Cloudinary
+        const uploadedImage = await uploadFilesToCloudinary(
+            [req.files.groupPhoto],
+            "group_photos",
+            { width: 500, height: 500, crop: "fill" }
+        );
+
+        const groupPhotoUrl = uploadedImage[0].secure_url;
+
+        // Update chat with new photo
+        const updatedChat = await Chat.findByIdAndUpdate(
+            chatId,
+            { groupPhoto: groupPhotoUrl },
+            { new: true }
+        )
+        .populate("users", "-password")
+        .populate("groupAdmin", "-password");
+
+        // Create system message for photo update
+        const admin = await User.findById(userId).select("firstName lastName");
+        const systemMessage = await Message.create({
+            sender: userId,
+            content: `${admin.firstName} ${admin.lastName} updated the group photo`,
+            chat: chatId,
+            isSystemMessage: true,
+        });
+
+        await Chat.findByIdAndUpdate(chatId, { latestMessage: systemMessage._id });
+
+        // Emit socket event to all group members
+        const io = global.io;
+        if (io && updatedChat.users) {
+            updatedChat.users.forEach((user) => {
+                io.to(user._id.toString()).emit("group photo updated", {
+                    chatId,
+                    groupPhoto: groupPhotoUrl,
+                    message: systemMessage,
+                    updatedChat,
+                });
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Group photo updated successfully",
+            groupPhoto: groupPhotoUrl,
+            updatedChat,
+        });
+    } catch (error) {
+        console.error("Update group photo error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while updating group photo",
         });
     }
 };

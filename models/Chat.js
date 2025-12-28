@@ -9,6 +9,10 @@ const chatSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    groupPhoto: {
+        type: String,
+        default: null,
+    },
   users: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   latestMessage: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
 unreadCounts: [
