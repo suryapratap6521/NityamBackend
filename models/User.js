@@ -120,6 +120,16 @@ isOnline: {
     ref:"Page"
   },
  ],
+ // Onboarding tracking fields
+ onboardingCompleted: {
+   type: Boolean,
+   default: false,
+ },
+ onboardingStep: {
+   type: String,
+   enum: ['profile', 'address', 'community', 'profession', 'completed'],
+   default: 'profile',
+ },
 });
 
 const User = mongoose.model('User', userSchema);

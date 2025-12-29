@@ -153,11 +153,9 @@ exports.signup = async (req, res) => {
 
 // Controller to update gender and date of birth in profile after signup
 exports.profileDetails = async (req, res) => {
-	console.log("dasdasd");
 	try {
 		const { gender, dateOfBirth } = req.body;
-		console.log(req.body,"-----adasdad");
-		const userId = req.user.id; // Assuming you have middleware that sets `req.user`
+		const userId = req.user.id;
 
 		// Validate input data
 		if (!gender || !dateOfBirth) {
@@ -172,11 +170,13 @@ exports.profileDetails = async (req, res) => {
 		})
 		const userDetails = await User.findByIdAndUpdate(
 			userId,
-			{ additionalDetails: createdProfile._id },
-			{ new: true } // This returns the updated document
+			{ 
+				additionalDetails: createdProfile._id,
+				onboardingStep: 'address' // Move to next step
+			},
+			{ new: true }
 		  ).populate("communityDetails").populate("additionalDetails");
-		  console.log(userDetails);
-		  // Check if the user was found and updated
+		  
 		  if (!userDetails) {
 			return res.status(404).json({
 			  success: false,
@@ -202,7 +202,7 @@ exports.profileDetails = async (req, res) => {
 exports.communityAddress = async (req, res) => {
 	try {
 	  const { state, city, pincode } = req.body;
-	  const userId = req.user.id; // Assuming middleware sets req.user
+	  const userId = req.user.id;
   
 	  // Validate input data
 	  if (!state || !city || !pincode) {
@@ -227,9 +227,10 @@ exports.communityAddress = async (req, res) => {
 		  state: state,
 		  city: city,
 		  postalCost: pincode,
+		  onboardingStep: 'community' // Move to next step
 		},
-		{ new: true } // Returns the updated document
-	  );
+		{ new: true }
+	  ).populate("communityDetails").populate("additionalDetails");
   
 	  if (!userDetails) {
 		return res.status(404).json({
@@ -242,7 +243,7 @@ exports.communityAddress = async (req, res) => {
 	  return res.status(200).json({
 		success: true,
 		message: "Community address updated successfully.",
-		userDetails, // Return updated user details
+		userDetails,
 	  });
 	} catch (error) {
 	  console.error("Error updating community address:", error);
@@ -344,7 +345,11 @@ exports.searchUsersAdvanced = async (req, res) => {
 	  // Also update the user's community and communityDetails fields
 	  const userDetails= await User.findByIdAndUpdate(
 		userId,
-		{ community: communityDetails.communityName, communityDetails: communityDetails._id },
+		{ 
+		  community: communityDetails.communityName, 
+		  communityDetails: communityDetails._id,
+		  onboardingStep: 'profession' // Move to next step
+		},
 		{ new: true }
 	  ).populate("communityDetails").populate("additionalDetails")
   
@@ -441,6 +446,8 @@ exports.searchUsersAdvanced = async (req, res) => {
 		{
 		  profession: profession,
 		  hourlyCharge: hourlyCharge,
+		  onboardingStep: 'completed', // Mark onboarding as completed
+		  onboardingCompleted: true
 		},
 		{ new: true } // This returns the updated document
 	  ).populate("communityDetails").populate("additionalDetails");

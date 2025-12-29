@@ -25,6 +25,9 @@ const {
   resetPasswordToken,
   resetPassword,
 } = require("../controllers/ResetPassword")
+const {
+  googleAuthMobile,
+} = require("../controllers/GoogleAuth")
 
 const { auth } = require("../middlewares/auth")
 
@@ -75,8 +78,11 @@ router.get("/searchAdvanced", auth, searchUsersAdvanced);
 
 // Export the router for use in the main application
 
+// Google OAuth routes
 router.get('/google', googleLogin);
 router.get('/google/callback',googleCallback);
+router.post('/google/mobile', googleAuthMobile);  // Mobile-friendly Google auth endpoint
+
 router.get('/getuser',auth,getUser)
 // router.post('/googledetails',auth,googleDetails);
 module.exports = router
