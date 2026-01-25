@@ -121,14 +121,19 @@ exports.signup = async (req, res) => {
 			image: `https://api.dicebear.com/5.x/initials/svg?seed=${firstName} ${lastName}`,
 		});
 
+		// Populate the user object with related data
+		const populatedUser = await User.findById(user._id)
+			.populate("additionalDetails")
+			.populate("communityDetails")
+			.select("-password");
+
 		const token = jwt.sign(
-			{ email: user.email, id: user._id, accountType: user.accountType },
+			{ email: populatedUser.email, id: populatedUser._id, accountType: populatedUser.accountType },
 			process.env.JWT_SECRET,
 			{ expiresIn: "24h" }
 		);
 
-		user.token = token;
-		user.password = undefined;
+		populatedUser.token = token;
 
 		const options = {
 			expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
@@ -138,7 +143,7 @@ exports.signup = async (req, res) => {
 		res.cookie("token", token, options).status(201).json({
 			success: true,
 			token,
-			user,
+			user: populatedUser,
 			message: "User registered successfully and logged in.",
 		});
 
