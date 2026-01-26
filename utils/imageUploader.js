@@ -36,20 +36,44 @@ exports.uploadFilesToCloudinary = async (files, folder, options = {}) => {
         files = [files];
     }
 
-    // Cloudinary free plan file size limit (bytes)
-    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-
     const uploadPromises = files.map(async file => {
+        const mimeType = file.mimetype || '';
+        const isVideo = mimeType.startsWith('video/');
+        
+        // Different size limits for images vs videos
+        const MAX_SIZE = isVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024; // 100MB for videos, 10MB for images
+        
         // Check file size if available
         if (file.size && file.size > MAX_SIZE) {
-            throw new Error(`File ${file.name || ''} exceeds 10MB Cloudinary limit.`);
+            const limitMB = isVideo ? 100 : 10;
+            throw new Error(`File ${file.name || ''} exceeds ${limitMB}MB Cloudinary limit.`);
         }
+        
         try {
-            return await cloudinary.uploader.upload(file.tempFilePath, {
-                ...options,
-                folder,
-                resource_type: "auto"
-            });
+            // ✅ For videos, use async processing to avoid blocking
+            if (isVideo) {
+                return await cloudinary.uploader.upload(file.tempFilePath, {
+                    ...options,
+                    folder: `${folder}/videos`,
+                    resource_type: "video",
+                    eager_async: true, // Process in background
+                    eager: [
+                        { width: 1280, crop: 'limit', quality: 'auto', fetch_format: 'auto' },
+                        { width: 640, crop: 'scale', format: 'mp4', quality: 'auto' }
+                    ],
+                    chunk_size: 6000000 // 6MB chunks
+                });
+            } 
+            // For images, upload normally
+            else {
+                return await cloudinary.uploader.upload(file.tempFilePath, {
+                    ...options,
+                    folder: `${folder}/images`,
+                    resource_type: "auto",
+                    quality: 'auto',
+                    fetch_format: 'auto'
+                });
+            }
         } catch (err) {
             console.error('Cloudinary upload error:', err);
             throw err;

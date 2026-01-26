@@ -86,6 +86,7 @@ app.use(cors({
   app.use("/api/v1/advpost", require("./routes/advPostRoutes"));
   app.use("/api/v1/notifications", require("./routes/Notification"));
   app.use("/api/v1/contact", require("./routes/contactRoutes"));
+  app.use("/api/v1/upload", require("./routes/upload")); // ✅ Video upload endpoint
 
   app.get("/", (_, res) => res.json({ success: true, message: "Server running" }));
   app.get('/health', (req, res) => {
