@@ -47,6 +47,12 @@ const userSchema = new mongoose.Schema({
   token: {
     type: String,
   },
+  refreshToken: {
+    type: String,
+  },
+  refreshTokenExpiry: {
+    type: Date,
+  },
   
   lastSeen: {
   type: Date,

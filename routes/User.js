@@ -19,7 +19,8 @@ const {
   verification,
   profession,
   searchUsersAdvanced,
-  getUser
+  getUser,
+  refreshToken // ✅ Add refresh token controller
 } = require("../controllers/Auth")
 const {
   resetPasswordToken,
@@ -45,6 +46,9 @@ router.post("/signup", signup)
 
 // Route for sending OTP to the user's email
 router.post("/sendotp", sendotp)
+
+// ✅ Route for refreshing access token (no auth required as token is expired)
+router.post("/refresh-token", refreshToken)
 
 // Route for Changing the password
 router.post("/changepassword", auth, changePassword)

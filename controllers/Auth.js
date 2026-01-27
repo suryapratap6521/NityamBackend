@@ -127,22 +127,27 @@ exports.signup = async (req, res) => {
 			.populate("communityDetails")
 			.select("-password");
 
-		const token = jwt.sign(
-			{ email: populatedUser.email, id: populatedUser._id, accountType: populatedUser.accountType },
-			process.env.JWT_SECRET,
-			{ expiresIn: "24h" }
-		);
+		// ✅ Generate both access and refresh tokens
+		const { generateTokens } = require('../utils/tokenUtils');
+		const { accessToken, refreshToken, refreshTokenExpiry } = generateTokens(populatedUser);
 
-		populatedUser.token = token;
+		// ✅ Store refresh token in database
+		await User.findByIdAndUpdate(populatedUser._id, {
+			refreshToken,
+			refreshTokenExpiry
+		});
+
+		populatedUser.token = accessToken;
 
 		const options = {
 			expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
 			httpOnly: true,
 		};
 
-		res.cookie("token", token, options).status(201).json({
+		res.cookie("token", accessToken, options).status(201).json({
 			success: true,
-			token,
+			token: accessToken,
+			refreshToken, // ✅ Include refresh token in response
 			user: populatedUser,
 			message: "User registered successfully and logged in.",
 		});
@@ -487,6 +492,98 @@ exports.searchUsersAdvanced = async (req, res) => {
   
 
 // Login controller for authenticating users
+/**
+ * Refresh Token Controller
+ * Validates refresh token and issues new access + refresh tokens
+ * This prevents automatic logout when access token expires
+ */
+exports.refreshToken = async (req, res) => {
+	try {
+		const { refreshToken } = req.body;
+
+		if (!refreshToken) {
+			return res.status(400).json({
+				success: false,
+				message: "Refresh token is required.",
+			});
+		}
+
+		// ✅ Verify the refresh token
+		const { verifyRefreshToken } = require('../utils/tokenUtils');
+		const verification = verifyRefreshToken(refreshToken);
+
+		if (!verification.valid) {
+			return res.status(401).json({
+				success: false,
+				message: "Invalid or expired refresh token. Please login again.",
+				shouldLogout: true, // ✅ Signal frontend to logout
+			});
+		}
+
+		// ✅ Find user and validate stored refresh token
+		const user = await User.findById(verification.decoded.id)
+			.populate('additionalDetails')
+			.populate('communityDetails')
+			.select('-password');
+
+		if (!user) {
+			return res.status(404).json({
+				success: false,
+				message: "User not found. Please login again.",
+				shouldLogout: true,
+			});
+		}
+
+		// ✅ Check if refresh token matches stored token
+		if (user.refreshToken !== refreshToken) {
+			return res.status(401).json({
+				success: false,
+				message: "Invalid refresh token. Please login again.",
+				shouldLogout: true,
+			});
+		}
+
+		// ✅ Check if refresh token has expired
+		if (user.refreshTokenExpiry && new Date() > user.refreshTokenExpiry) {
+			return res.status(401).json({
+				success: false,
+				message: "Refresh token expired. Please login again.",
+				shouldLogout: true,
+			});
+		}
+
+		// ✅ Generate new tokens
+		const { generateTokens } = require('../utils/tokenUtils');
+		const { accessToken, refreshToken: newRefreshToken, refreshTokenExpiry } = generateTokens(user);
+
+		// ✅ Update refresh token in database
+		await User.findByIdAndUpdate(user._id, {
+			refreshToken: newRefreshToken,
+			refreshTokenExpiry
+		});
+
+		console.log(`✅ Token refreshed successfully for user: ${user.email}`);
+
+		// ✅ Return new tokens
+		return res.status(200).json({
+			success: true,
+			token: accessToken,
+			refreshToken: newRefreshToken,
+			user,
+			message: "Token refreshed successfully.",
+		});
+
+	} catch (error) {
+		console.error("Refresh Token Error:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Token refresh failed. Please login again.",
+			shouldLogout: true,
+		});
+	}
+};
+
+// Login controller for authenticating users
 exports.login = async (req, res) => {
 	try {
 		const {  password } = req.body;
@@ -525,12 +622,15 @@ const user = await User.findOne({ email })
 			});
 		}
 
-		// Generate JWT token
-		const token = jwt.sign(
-			{ email: user.email, id: user._id, accountType: user.accountType },
-			process.env.JWT_SECRET,
-			{ expiresIn: '24h' }
-		);
+		// ✅ Generate both access and refresh tokens
+		const { generateTokens } = require('../utils/tokenUtils');
+		const { accessToken, refreshToken, refreshTokenExpiry } = generateTokens(user);
+
+		// ✅ Store refresh token in database
+		await User.findByIdAndUpdate(user._id, {
+			refreshToken,
+			refreshTokenExpiry
+		});
 
 		// Set cookie options
 		const options = {
@@ -539,13 +639,14 @@ const user = await User.findOne({ email })
 		};
 
 		// Attach token to user object and remove password from response
-		user.token = token;
+		user.token = accessToken;
 		user.password = undefined;
 
-		// Send response with token and user info
-		res.cookie("token", token, options).status(200).json({
+		// ✅ Send response with both tokens
+		res.cookie("token", accessToken, options).status(200).json({
 			success: true,
-			token,
+			token: accessToken,
+			refreshToken, // ✅ Include refresh token in response
 			user,
 			message: "User logged in successfully.",
 		});
