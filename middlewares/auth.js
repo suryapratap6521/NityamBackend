@@ -29,11 +29,28 @@ exports.auth = async (req, res, next) => {
         }
         catch(err) {
             //verification - issue
-            console.log(err);
-            return res.status(401).json({
-                success:false,
-                message:'token is invalid',
-            });
+            // ✅ Clean logging for token errors instead of full stack trace
+            if (err.name === 'TokenExpiredError') {
+                console.log(`⏰ Token expired at ${err.expiredAt} - User should refresh or re-login`);
+                return res.status(401).json({
+                    success: false,
+                    message: 'token is invalid',
+                    shouldLogout: true, // Signal to frontend to logout
+                });
+            } else if (err.name === 'JsonWebTokenError') {
+                console.log(`🔒 Invalid token: ${err.message}`);
+                return res.status(401).json({
+                    success: false,
+                    message: 'token is invalid',
+                    shouldLogout: true,
+                });
+            } else {
+                console.log(`❌ Token verification error: ${err.message}`);
+                return res.status(401).json({
+                    success: false,
+                    message: 'token is invalid',
+                });
+            }
         }
         next();
     }
