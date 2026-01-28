@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const softDeletePlugin = require('../plugins/softDelete');
 const servicesSchema = new mongoose.Schema({
     firstName: {
         type: String,
@@ -30,6 +31,9 @@ const servicesSchema = new mongoose.Schema({
         default: Date.now,
     },
 });
+
+// ✅ Apply soft delete plugin
+servicesSchema.plugin(softDeletePlugin);
 
 const Services = mongoose.model('Services', servicesSchema);
 module.exports = Services;

@@ -389,8 +389,8 @@ exports.deletePage = async (req, res) => {
       // Store the IDs of the advertised posts for reference
       const advertisedPostIds = advertisedPosts.map(post => post._id);
 
-      // Remove the advertised posts from the AdvertisedPost collection
-      await AdvertisedPost.deleteMany({ pageId });
+      // ✅ Soft delete the advertised posts (preserves for recovery)
+      await AdvertisedPost.softDeleteMany({ pageId }, req.user.id);
 
       // Remove references to these advertised posts from all communities
       await Community.updateMany(
@@ -399,8 +399,8 @@ exports.deletePage = async (req, res) => {
       );
     }
 
-    // Finally, delete the page itself from the database
-    await Page.findByIdAndDelete(pageId);
+    // ✅ Soft delete the page itself (preserves all data for recovery)
+    await Page.softDeleteById(pageId, req.user.id);
 
     // Send success response
     res.status(200).json({

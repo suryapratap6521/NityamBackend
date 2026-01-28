@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const softDeletePlugin = require('../plugins/softDelete');
 
 // Define the Profile schema
 const profileSchema = new mongoose.Schema({
@@ -14,6 +15,9 @@ const profileSchema = new mongoose.Schema({
   },
  
 });
+
+// ✅ Apply soft delete plugin
+profileSchema.plugin(softDeletePlugin);
 
 // Export the Profile model
 module.exports = mongoose.model("Profile", profileSchema);

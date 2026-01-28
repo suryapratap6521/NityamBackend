@@ -1,4 +1,5 @@
 const mongoose=require('mongoose');
+const softDeletePlugin = require('../plugins/softDelete');
 const communitySchema=new mongoose.Schema({
 communityName:{
     type:String,
@@ -23,6 +24,9 @@ advertisedPosts:[
     }
 ],
 })
+
+// ✅ Apply soft delete plugin
+communitySchema.plugin(softDeletePlugin);
 
 const Community=mongoose.model('Community',communitySchema);
 module.exports=Community;

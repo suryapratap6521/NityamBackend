@@ -703,11 +703,11 @@ exports.deletePost = async (req, res) => {
       $pull: { posts: postId }
     });
 
-    // Step 5: Delete associated notifications
-    await Notification.deleteMany({ post: postId });
+    // Step 5: ✅ Soft delete associated notifications
+    await Notification.softDeleteMany({ post: postId }, req.user._id);
 
-    // Step 6: Delete the post (along with embedded comments/replies)
-    await Post.findByIdAndDelete(postId);
+    // Step 6: ✅ Soft delete the post (preserves comments/replies/likes for recovery)
+    await Post.softDeleteById(postId, req.user._id);
 
     // Step 7: Emit real-time update to community
     global.io.to(user.communityDetails.toString()).emit("postDeleted", { postId });
@@ -912,5 +912,72 @@ exports.createAdv = async (req, res) => {
   } catch (error) {
     console.error("Error adding post to communities:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ✅ RESTORE DELETED POST
+// Recovers a soft-deleted post and all its data
+exports.restorePost = async (req, res) => {
+  try {
+    const { id: postId } = req.params;
+    const userId = req.user._id;
+
+    // Find the deleted post
+    const post = await Post.findOneWithDeleted({ _id: postId });
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found",
+      });
+    }
+
+    // Verify ownership
+    if (post.postedBy.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only restore your own posts",
+      });
+    }
+
+    // Check if already active
+    if (!post.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Post is not deleted",
+      });
+    }
+
+    // Restore the post
+    await Post.restoreById(postId);
+
+    // Restore associated notifications
+    await Notification.restoreMany({ post: postId });
+
+    // Add post back to community
+    const user = await User.findById(userId);
+    await Community.findByIdAndUpdate(user.communityDetails, {
+      $addToSet: { posts: postId }
+    });
+
+    // Add post back to user's posts
+    user.postByUser.push(postId);
+    await user.save();
+
+    // Emit real-time update
+    global.io.to(user.communityDetails.toString()).emit("postRestored", { postId });
+
+    return res.status(200).json({
+      success: true,
+      message: "Post restored successfully",
+      post,
+    });
+
+  } catch (error) {
+    console.error("Error restoring post:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to restore post",
+    });
   }
 };

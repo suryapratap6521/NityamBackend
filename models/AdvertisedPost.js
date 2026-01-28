@@ -1,6 +1,7 @@
 
 
 const mongoose = require("mongoose");
+const softDeletePlugin = require('../plugins/softDelete');
 
 const replySchema = new mongoose.Schema({
   repliedBy: { type: mongoose.Types.ObjectId, ref: "User" },
@@ -46,5 +47,8 @@ const advertisedPostSchema = new mongoose.Schema({
   comments: [commentSchema],
   transactionId: { type: String },
 }, { timestamps: true });
+
+// ✅ Apply soft delete plugin
+advertisedPostSchema.plugin(softDeletePlugin);
 
 module.exports = mongoose.model("AdvertisedPost", advertisedPostSchema);

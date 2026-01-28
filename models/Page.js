@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const softDeletePlugin = require('../plugins/softDelete');
 
 const PageSchema = new mongoose.Schema({
    
@@ -42,6 +43,9 @@ advertisedPosts:
 },
   { timestamps: true }
 );
+
+// ✅ Apply soft delete plugin
+PageSchema.plugin(softDeletePlugin);
 
 const Page = mongoose.model("Page", PageSchema);
 

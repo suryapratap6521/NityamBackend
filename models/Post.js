@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const softDeletePlugin = require('../plugins/softDelete');
 
 // Recursive reply schema (for true nested replies)
 const replySchema = new mongoose.Schema({
@@ -139,5 +140,8 @@ const postSchema = new mongoose.Schema({
     default: Date.now,
   }
 });
+
+// ✅ Apply soft delete plugin
+postSchema.plugin(softDeletePlugin);
 
 module.exports = mongoose.model("Post", postSchema);

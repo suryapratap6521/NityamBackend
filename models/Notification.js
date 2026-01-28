@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const softDeletePlugin = require('../plugins/softDelete');
 
 const notificationSchema = new mongoose.Schema({
   recipient: {
@@ -37,6 +38,9 @@ const notificationSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// ✅ Apply soft delete plugin
+notificationSchema.plugin(softDeletePlugin);
 
 const Notification = mongoose.model("Notification", notificationSchema);
 module.exports = Notification;

@@ -1,4 +1,5 @@
     const mongoose = require("mongoose");
+    const softDeletePlugin = require('../plugins/softDelete');
 
     const messageSchema = new mongoose.Schema({
         sender: {
@@ -39,6 +40,9 @@
     }, {
         timestamps: true, 
     });
+
+    // ✅ Apply soft delete plugin
+    messageSchema.plugin(softDeletePlugin);
 
     const Message = mongoose.model("Message", messageSchema);
     module.exports = Message;

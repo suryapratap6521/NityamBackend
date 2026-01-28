@@ -108,11 +108,11 @@ exports.updateProfile = async (req, res) => {
 
 // *****************************************
 
-      // Now Delete User
-      await User.findByIdAndDelete({ _id: id })
+      // ✅ Soft delete User (preserves all user data for recovery and compliance)
+      await User.softDeleteById(id, id) // User deletes themselves
       res.status(200).json({
         success: true,
-        message: "User deleted successfully",
+        message: "User deleted successfully (recoverable)",
       })
       // await CourseProgress.deleteMany({ userId: id }) ye abhi krna h 
     } catch (error) {

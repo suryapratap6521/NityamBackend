@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const softDeletePlugin = require('../plugins/softDelete');
 
 const chatSchema = new mongoose.Schema({
     chatName: {
@@ -32,6 +33,9 @@ unreadCounts: [
 }, {
     timestamps: true,
 });
+
+// ✅ Apply soft delete plugin
+chatSchema.plugin(softDeletePlugin);
 
 const Chat = mongoose.model("Chat", chatSchema);
 

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { isEmail } = require('validator');
+const softDeletePlugin = require('../plugins/softDelete');
 
 const userSchema = new mongoose.Schema({
 
@@ -137,6 +138,9 @@ isOnline: {
    default: 'profile',
  },
 });
+
+// ✅ Apply soft delete plugin
+userSchema.plugin(softDeletePlugin);
 
 const User = mongoose.model('User', userSchema);
 module.exports = User;

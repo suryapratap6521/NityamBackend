@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const softDeletePlugin = require('../plugins/softDelete');
 const mailSender = require("../utils/mailSender");
 const emailTemplate = require("../mail/templates/emailVerificationTemplate");
 const OTPSchema = new mongoose.Schema({
@@ -50,6 +51,9 @@ OTPSchema.pre("save", async function (next) {
 	}
 	next();
 });
+
+// ✅ Apply soft delete plugin
+OTPSchema.plugin(softDeletePlugin);
 
 const OTP = mongoose.model("OTP", OTPSchema);
 

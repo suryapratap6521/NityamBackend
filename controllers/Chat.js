@@ -509,9 +509,11 @@ exports.deleteGroup = async (req, res) => {
             });
         }
 
-        await Message.deleteMany({ chat: chatId });
+        // ✅ Soft delete all messages in the chat (preserves chat history for recovery)
+        await Message.softDeleteMany({ chat: chatId }, userId);
         
-        await Chat.findByIdAndDelete(chatId);
+        // ✅ Soft delete the chat itself
+        await Chat.softDeleteById(chatId, userId);
 
         const io = global.io;
         if (io && chat.users) {

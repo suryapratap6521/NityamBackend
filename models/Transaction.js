@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const softDeletePlugin = require('../plugins/softDelete');
 
 const transactionSchema = new mongoose.Schema({
 
@@ -26,6 +27,9 @@ const transactionSchema = new mongoose.Schema({
 communities: [{ type: mongoose.Schema.Types.ObjectId, ref: "Community" }],
 
 }, { timestamps: true });
+
+// ✅ Apply soft delete plugin
+transactionSchema.plugin(softDeletePlugin);
 
 const User = mongoose.model('Transactions', transactionSchema);
 module.exports = User;
