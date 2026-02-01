@@ -151,7 +151,7 @@ exports.createPost = async (req, res) => {
     const populatedPost = await Post.findById(post._id)
       .populate({
         path: 'postByUser',
-        select: 'firstName lastName email image',
+        select: 'firstName lastName email image city state community',
         populate: {
           path: 'communityDetails',
           select: 'communityName city community image'
