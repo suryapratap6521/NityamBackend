@@ -679,32 +679,42 @@ exports.googleLogin = passport.authenticate('google', {
 		  return res.status(400).json({ message: 'Google ID is required for Google login' });
 		}
 		
-		// Generate JWT token
-		const token = jwt.sign(
-		  { email: user.email, id: user._id, accountType: user.accountType },
-		  process.env.JWT_SECRET,
-		  { expiresIn: '24h' }
-		);
+		// Generate both access and refresh tokens (same as regular login)
+		const { generateTokens } = require('../utils/tokenUtils');
+		const { accessToken, refreshToken, refreshTokenExpiry } = generateTokens(user);
 		
-		user.token = token;
+		// Store refresh token in database
+		await User.findByIdAndUpdate(user._id, {
+			refreshToken,
+			refreshTokenExpiry
+		});
+		
+		user.token = accessToken;
 		await user.save();
 		
 		// Re-fetch the updated user (if needed)
 		const updatedUser = await User.findById(user._id).populate("additionalDetails").populate('communityDetails');
 		
 		// Set cookies (stringify the user)
-		res.cookie('user', JSON.stringify(updatedUser), {
-		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		  secure: true,
-		  sameSite: 'None',
+	res.cookie('user', JSON.stringify(updatedUser), {
+	  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+	  secure: true,
+	  sameSite: 'None',
 
-		});
-		res.cookie('token', token, {
-		  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-		  httpOnly: true,
-		  secure: true,
-		  sameSite: 'None',
-		});
+	});
+	res.cookie('token', accessToken, {
+	  expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+	  httpOnly: true,
+	  secure: true,
+	  sameSite: 'None',
+	});
+	// Set refresh token in cookie for mobile apps
+	res.cookie('refreshToken', refreshToken, {
+	  expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+	  httpOnly: true,
+	  secure: true,
+	  sameSite: 'None',
+	});
 		
 		// Determine if onboarding is complete.
 		// For example, if communityDetails exists or the other onboarding fields are set.
