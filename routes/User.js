@@ -20,6 +20,7 @@ const {
   profession,
   searchUsersAdvanced,
   getUser,
+  getUserById,
   refreshToken // ✅ Add refresh token controller
 } = require("../controllers/Auth")
 const {
@@ -79,6 +80,9 @@ router.get("/search",auth,searchUsers);
 
 // Route for advanced user search with filters
 router.get("/searchAdvanced", auth, searchUsersAdvanced);
+
+// Route to get a specific user profile by ID
+router.get("/user/:userId", auth, getUserById);
 
 // Export the router for use in the main application
 

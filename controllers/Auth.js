@@ -879,11 +879,12 @@ exports.changePassword = async (req, res) => {
 // for searching of the users
 exports.searchUsers = async (req, res) => {
 	const userId = req.user.id;
-	const searchTerm = req.query.search || "";
+	const searchTerm = req.query.search || req.query.query || "";
+	const limit = parseInt(req.query.limit, 10) || 10;
   
 	try {
 	  const userDetail = await User.findById(userId).select("communityDetails");
-	  if (!userDetail) return res.status(404).send("User not found");
+	  if (!userDetail) return res.status(404).json({ success: false, message: "User not found" });
   
 	  const searchRegex = new RegExp(searchTerm, "i");
 	  const query = {
@@ -894,18 +895,22 @@ exports.searchUsers = async (req, res) => {
 		  { lastName: searchRegex },
 		  { email: searchRegex },
 		  { community: searchRegex },
+		  { profession: searchRegex },
+		  { city: searchRegex },
 		],
 	  };
   
 	  const users = await User.find(query)
-		.populate("communityDetails","communityName")
-		.select("firstName lastName email image") // return only needed fields
-		.limit(10); // add limit for performance
+		.populate("communityDetails", "communityName")
+		.populate("additionalDetails")
+		.populate("services", "name")
+		.select("firstName lastName email image profession city state community Address communityDetails additionalDetails services")
+		.limit(limit);
   
-	  res.status(200).json(users);
+	  res.status(200).json({ success: true, data: users, count: users.length });
 	} catch (error) {
 	  console.error("Search error:", error);
-	  res.status(500).send("Server Error in searching the community");
+	  res.status(500).json({ success: false, message: "Server Error in searching the community" });
 	}
   };
 
@@ -927,6 +932,33 @@ const user = await User.findById(decoded.id)
 	return res.status(200).json({ success: true, user, token });
   } catch (err) {
 	return res.status(401).json({ success: false });
+  }
+};
+
+// Get user by ID for profile viewing
+exports.getUserById = async (req, res) => {
+  try {
+	const { userId } = req.params;
+	const requesterId = req.user.id;
+
+	if (!userId) {
+	  return res.status(400).json({ success: false, message: "User ID is required" });
+	}
+
+	const user = await User.findById(userId)
+	  .populate("communityDetails", "communityName")
+	  .populate("additionalDetails")
+	  .populate("services", "name")
+	  .select("firstName lastName email image profession services city state communityDetails additionalDetails hourlyCharge community Address");
+
+	if (!user) {
+	  return res.status(404).json({ success: false, message: "User not found" });
+	}
+
+	return res.status(200).json({ success: true, data: user });
+  } catch (err) {
+	console.error("Get user by ID error:", err);
+	return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
