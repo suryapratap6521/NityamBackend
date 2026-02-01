@@ -1,5 +1,6 @@
 const Services = require('../models/Services');
 const User = require("../models/User");
+const Chat = require('../models/Chat');
 const { uploadFilesToCloudinary } = require("../utils/imageUploader")
 
 
@@ -49,20 +50,47 @@ exports.createService = async (req, res) => {
 
 
 exports.getServices = async (req, res) => {
-    
     try {
-        const allUsers = await User.find({}).populate({
-            path: 'services',
-        })
-        .populate({
-            path:"communityDetails",
-        })
-        const userMadeServices= await Services.find({}).populate({
-            path:"createdBy",
-            populate:{
-                path:"communityDetails",
-            }
-        });
+        const userId = req.user?.id;
+
+        // ✅ Fetch all existing 1-1 chats for current user once
+        let chatMap = new Map();
+        if (userId) {
+            const directChats = await Chat.find({
+                isGroupChat: false,
+                users: userId
+            }).select('users _id').lean();
+
+            directChats.forEach(chat => {
+                const otherUser = chat.users?.find(u => u.toString() !== userId.toString());
+                if (otherUser) {
+                    chatMap.set(otherUser.toString(), chat._id);
+                }
+            });
+        }
+
+        const allUsersRaw = await User.find({})
+            .populate({ path: 'services' })
+            .populate({ path: 'communityDetails' })
+            .lean();
+
+        const userMadeServicesRaw = await Services.find({})
+            .populate({
+                path: 'createdBy',
+                populate: { path: 'communityDetails' }
+            })
+            .lean();
+
+        const allUsers = allUsersRaw.map(user => ({
+            ...user,
+            chatId: chatMap.get(user._id.toString()) || null
+        }));
+
+        const userMadeServices = userMadeServicesRaw.map(service => ({
+            ...service,
+            chatId: service.createdBy?._id ? (chatMap.get(service.createdBy._id.toString()) || null) : null
+        }));
+
         return res.status(200).json({
             success: true,
             message: "Fetched all services",
