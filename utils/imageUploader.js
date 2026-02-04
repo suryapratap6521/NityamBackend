@@ -64,14 +64,25 @@ exports.uploadFilesToCloudinary = async (files, folder, options = {}) => {
                     chunk_size: 6000000 // 6MB chunks
                 });
             } 
-            // For images, upload normally
+            // For images, upload with aggressive compression
             else {
                 return await cloudinary.uploader.upload(file.tempFilePath, {
                     ...options,
                     folder: `${folder}/images`,
                     resource_type: "auto",
-                    quality: 'auto',
-                    fetch_format: 'auto'
+                    // ✅ Aggressive optimization for faster uploads & loads
+                    quality: 'auto:low', // Compress images automatically
+                    fetch_format: 'auto', // Auto-convert to webp for modern browsers
+                    width: 1920, // Max width - resize larger images
+                    height: 1920, // Max height
+                    crop: 'limit', // Only resize if larger
+                    flags: 'lossy', // Allow lossy compression
+                    // ✅ Generate responsive image variants
+                    eager: [
+                        { width: 640, crop: 'scale', quality: 'auto:low', fetch_format: 'auto' },  // Mobile
+                        { width: 1280, crop: 'scale', quality: 'auto:low', fetch_format: 'auto' }  // Desktop
+                    ],
+                    eager_async: true // Don't wait for variants
                 });
             }
         } catch (err) {

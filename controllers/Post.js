@@ -729,8 +729,10 @@ exports.deletePost = async (req, res) => {
 
 exports.updatePost = async (req, res) => {
   try {
-    console.log(req.body);
-    const { postId, title, description, location, startDate, endDate, hostedBy } = req.body;
+    console.log('📝 Update Post Request Body:', req.body);
+    console.log('📝 Update Post Files:', req.files);
+    
+    const { postId, title, description, location, startDate, endDate, hostedBy, price, pollOptions, removeMedia } = req.body;
     const userId = req.user.id;
 
     if (!postId || !userId) {
@@ -759,38 +761,167 @@ exports.updatePost = async (req, res) => {
     // Update editable fields
     if (title !== undefined) post.title = title;
     if (description !== undefined) post.description = description;
+    
+    // ✅ Handle Event-specific fields
     if (post.postType === "event") {
-      if (location) post.location = location;
-      if (startDate) post.startDate = startDate;
-      if (endDate) post.endDate = endDate;
-      if (hostedBy) post.hostedBy = hostedBy;
+      if (location !== undefined) post.location = location;
+      if (startDate !== undefined) post.startDate = startDate;
+      if (endDate !== undefined) post.endDate = endDate;
+      if (hostedBy !== undefined) post.hostedBy = hostedBy;
+      if (price !== undefined) post.price = price; // ✅ Update event price/type
     }
 
-    // If media files are present (image/video), update them
+    // ✅ Handle Poll option updates while preserving votes
+    if (post.postType === "poll" && pollOptions !== undefined) {
+      try {
+        const parsedOptions = typeof pollOptions === 'string' ? JSON.parse(pollOptions) : pollOptions;
+        if (Array.isArray(parsedOptions) && parsedOptions.length >= 2) {
+          const oldOptions = post.pollOptions || [];
+          const newOptions = [];
+          
+          // Map old options by text for easy lookup
+          const oldOptionsMap = new Map();
+          oldOptions.forEach((opt, index) => {
+            oldOptionsMap.set(opt.option.toLowerCase().trim(), { index, votes: opt.votes || [] });
+          });
+          
+          console.log('📊 Old poll options:', oldOptions.map(o => ({ option: o.option, voteCount: o.votes?.length || 0 })));
+          console.log('📊 New poll options:', parsedOptions);
+          
+          // Track removed votes for logging
+          let totalRemovedVotes = 0;
+          const removedVoters = new Set();
+          
+          // Build new options array
+          parsedOptions.forEach((newOptionText) => {
+            const trimmedText = newOptionText.trim();
+            const lowerText = trimmedText.toLowerCase();
+            
+            // Check if this option existed before (by matching text)
+            const existingOption = oldOptionsMap.get(lowerText);
+            
+            if (existingOption) {
+              // ✅ Option exists - PRESERVE votes, update text if needed
+              newOptions.push({
+                option: trimmedText,  // Use new text (in case of capitalization change)
+                votes: existingOption.votes  // KEEP all existing votes
+              });
+              console.log(`✅ Preserved ${existingOption.votes.length} votes for option: "${trimmedText}"`);
+            } else {
+              // ✅ New option - start with empty votes
+              newOptions.push({
+                option: trimmedText,
+                votes: []
+              });
+              console.log(`➕ Added new option with 0 votes: "${trimmedText}"`);
+            }
+          });
+          
+          // ✅ Handle removed options - track lost votes
+          oldOptions.forEach((oldOpt) => {
+            const wasKept = parsedOptions.some(newOpt => 
+              newOpt.toLowerCase().trim() === oldOpt.option.toLowerCase().trim()
+            );
+            
+            if (!wasKept && oldOpt.votes && oldOpt.votes.length > 0) {
+              totalRemovedVotes += oldOpt.votes.length;
+              oldOpt.votes.forEach(voterId => removedVoters.add(voterId.toString()));
+              console.log(`🗑️ Removed option "${oldOpt.option}" had ${oldOpt.votes.length} votes`);
+            }
+          });
+          
+          // Update the post with new options
+          post.pollOptions = newOptions;
+          
+          // Calculate new vote distribution
+          const totalVotesNow = newOptions.reduce((sum, opt) => sum + (opt.votes?.length || 0), 0);
+          
+          console.log('✅ Poll options updated:');
+          console.log(`   - Total options: ${newOptions.length}`);
+          console.log(`   - Total votes preserved: ${totalVotesNow}`);
+          console.log(`   - Votes lost from removed options: ${totalRemovedVotes}`);
+          console.log(`   - Unique voters affected: ${removedVoters.size}`);
+          
+          newOptions.forEach((opt, index) => {
+            const voteCount = opt.votes?.length || 0;
+            const percentage = totalVotesNow > 0 ? ((voteCount / totalVotesNow) * 100).toFixed(1) : 0;
+            console.log(`   ${index + 1}. "${opt.option}": ${voteCount} votes (${percentage}%)`);
+          });
+        }
+      } catch (e) {
+        console.error('❌ Failed to parse poll options:', e);
+      }
+    }
+
+    // ✅ Handle media removal (when user deletes all photos)
+    if (removeMedia === 'true' || removeMedia === true) {
+      console.log('🗑️ Removing all media from post');
+      post.imgPath = [];
+    }
+
+    // ✅ Handle new media upload (when user adds new photos)
     const mediaFiles = req.files ? (Array.isArray(req.files.media) ? req.files.media : [req.files.media]) : [];
 
     if (mediaFiles.length > 0) {
+      console.log('📸 Uploading new media files:', mediaFiles.length);
       const uploadDetails = await uploadFilesToCloudinary(mediaFiles, process.env.FOLDER_NAME);
       post.imgPath = uploadDetails.map(file => file.secure_url);
     }
 
-    await post.save();
+    // ✅ Use atomic update to avoid VersionError from concurrent modifications
+    const updateFields = {
+      title: post.title,
+      description: post.description,
+      imgPath: post.imgPath,
+    };
 
-    // ✅ Populate post with user details and communityDetails before returning
-    const populatedPost = await Post.findById(post._id)
-      .populate({
-        path: 'postByUser',
-        select: 'firstName lastName email image',
-        populate: {
-          path: 'communityDetails',
-          select: 'communityName city community image'
-        }
+    // Add event-specific fields
+    if (post.postType === "event") {
+      updateFields.location = post.location;
+      updateFields.startDate = post.startDate;
+      updateFields.endDate = post.endDate;
+      updateFields.hostedBy = post.hostedBy;
+      updateFields.price = post.price;
+      // ✅ CRITICAL: Don't touch attendees - preserve them
+    }
+
+    // Add poll-specific fields
+    if (post.postType === "poll") {
+      updateFields.pollOptions = post.pollOptions;
+    }
+
+    // ✅ Atomic update - avoids version conflicts
+    const updatedPost = await Post.findByIdAndUpdate(
+      postId,
+      { $set: updateFields },
+      { 
+        new: true, // Return updated document
+        runValidators: true // Run schema validators
+      }
+    ).populate({
+      path: 'postByUser',
+      select: 'firstName lastName email image',
+      populate: {
+        path: 'communityDetails',
+        select: 'communityName city community image'
+      }
+    }).populate('attendees', 'firstName lastName email image');
+
+    if (!updatedPost) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found after update.",
       });
+    }
+
+    console.log('✅ Post updated successfully (atomic)');
+    console.log('   - Attendees preserved:', updatedPost.attendees?.length || 0);
+    console.log('   - Likes preserved:', updatedPost.likes?.length || 0);
 
     return res.status(200).json({
       success: true,
       message: "Post updated successfully.",
-      updatedPost: populatedPost,
+      updatedPost: updatedPost,
     });
 
   } catch (error) {
