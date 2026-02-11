@@ -228,6 +228,31 @@ exports.getAdvertisedPosts = async (req, res) => {
   }
 };
 
+// Get Advertised Posts by Specific User (logged-in user's ads)
+exports.getUserAdvertisedPosts = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const posts = await AdvertisedPost.find({ createdBy: userId })
+      .populate("createdBy", "firstName lastName email image")
+      .populate("pageId", "businessName businessCategory")
+      .populate("communities", "communityName")
+      .populate("like", "firstName lastName image")
+      .populate("comments.commentedBy", "firstName lastName image")
+      .populate("comments.replies.repliedBy", "firstName lastName image")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ 
+      success: true, 
+      count: posts.length,
+      posts 
+    });
+  } catch (error) {
+    console.error("Error fetching user ads:", error);
+    res.status(500).json({ success: false, message: "Error fetching user's advertised posts.", error: error.message });
+  }
+};
+
 // Like Advertised Post
 exports.likeAdvertisedPost = async (req, res) => {
   try {
