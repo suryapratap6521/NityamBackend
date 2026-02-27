@@ -487,11 +487,32 @@ exports.getPostById = async (req, res) => {
     const post = await Post.findById(req.params.id)
       .populate({
         path: "postByUser",
-        select: "firstName lastName image",
+        select: "firstName lastName image city state communityDetails",
         populate: {
           path: "communityDetails",
           select: "communityName city community image"
         }
+      })
+      .populate({
+        path: "likes",
+        select: "firstName lastName email image",
+      })
+      .populate({
+        path: "comments.commentedBy",
+        select: "firstName lastName email image communityDetails",
+        populate: { path: "communityDetails", select: "communityName" },
+      })
+      .populate({
+        path: "comments.replies.repliedBy",
+        select: "firstName lastName image",
+      })
+      .populate({
+        path: "comments.replies.replies.repliedBy",
+        select: "firstName lastName image",
+      })
+      .populate({
+        path: "pollOptions.votes",
+        select: "firstName lastName email image",
       });
     
     if (!post) {
